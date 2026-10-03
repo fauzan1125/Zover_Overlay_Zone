@@ -50,8 +50,7 @@ Aplikasi web ringan (vanilla JavaScript, tanpa build tool) yang berjalan **100% 
 3. Buka browser, kunjungi **`http://localhost:8765`**.
 4. Isi kredensial platform pada tab **Koneksi Stream**, lalu klik **Hubungkan**.
 5. (Opsional) Untuk OBS: klik tombol **"Salin Path Overlay Chat"** dan **"Salin Path Overlay ViewCount"**, lalu tambahkan **dua Browser Source terpisah** di OBS (satu untuk chat, satu untuk bar viewcount).
-
-> 💡 **Catatan config:** file `config.json` **sengaja tidak disertakan** dalam repo (berisi data pribadi/token). Aplikasi tetap jalan tanpanya dan akan **membuat `config.json` otomatis** saat Anda pertama kali menyimpan pengaturan. Lihat `config.example.json` untuk referensi struktur.
+ 
 
 ---
 
@@ -137,9 +136,7 @@ Membutuhkan aplikasi **IndoFinity** berjalan di PC yang sama.
 ## 🔐 Keamanan & Privasi
 
 - Server **hanya bind ke `localhost` / `127.0.0.1`** — tidak terjangkau dari internet.
-- **Jangan host proyek ini ke internet publik.** Ini dirancang sebagai tool lokal/desktop.
 - Endpoint server dikunci **same-origin** (menolak request lintas-origin/CSRF), proxy dibatasi ke host YouTube (anti-SSRF), dan ada proteksi path-traversal.
-- Token API (IndoFinity / YouTube) disimpan **lokal** di `config.json` yang **di-ignore Git**, sehingga tidak ikut ter-upload ke GitHub.
 
 ---
 
