@@ -1,0 +1,29 @@
+# Konfigurasi runtime pribadi (username, token API, URL live)
+# Jangan di-commit. Salin config.example.json -> config.json untuk mulai.
+config.json
+
+# OS / Editor / IDE
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+
+# AI guidelines & internal skills (khusus editor lokal)
+.agents/
+AGENTS.md
+anti-slop-main/
+antislop.md
+
+# Mockup desain internal & kode contoh pihak ketiga
+stitch_indofinity_dark_blue_ui/
+ws_api_example/
+
+# File uji / sampah lokal / cache browser
+test.mp3
+test2.mp3
+brave_out.txt
+test_err.html
+tiktok_proxy.html
+
+# Dependency (jika nanti memakai npm)
+node_modules/

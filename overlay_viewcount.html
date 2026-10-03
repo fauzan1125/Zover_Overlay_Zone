@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="referrer" content="no-referrer">
+  <title>ViewCount Overlay - OBS</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body class="mode-viewcount">
+
+  <!-- OBS BROWSER SOURCE: BAR VIEWCOUNT (terpisah dari overlay chat) -->
+  <div class="vc-overlay-wrapper">
+    <div class="viewcount-bar" id="viewcount-bar" style="display:none;"></div>
+  </div>
+
+  <script src="js/connectors/tikfinity.js"></script>
+  <script src="js/viewcount.js"></script>
+  <script>
+    (function () {
+      const vc = new ViewCountMonitor();
+      if (typeof TikFinityConnector !== 'undefined') {
+        const tf = new TikFinityConnector(null, (count) => vc.setTikTokCount(count), null);
+        tf.connect();
+      }
+      vc.attachConfigPolling(5000);
+    })();
+  </script>
+
+</body>
+
+</html>

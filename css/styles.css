@@ -1,0 +1,774 @@
+/* ==========================================================================
+   Multi-Platform Live Chat Overlay & Mbak Google TTS - Master Stylesheet
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Fira+Code:wght@400;600&display=swap');
+
+:root {
+  /* Core Theme Colors */
+  --bg-dark: #090d16;
+  --bg-card: rgba(16, 23, 38, 0.75);
+  --bg-card-hover: rgba(24, 34, 56, 0.85);
+  --border-glass: rgba(255, 255, 255, 0.08);
+  --border-glass-glow: rgba(255, 255, 255, 0.18);
+  
+  --text-main: #f1f5f9;
+  --text-muted: #94a3b8;
+  --text-dim: #64748b;
+
+  /* Accent Colors */
+  --accent-primary: #6366f1;
+  --accent-glow: rgba(99, 102, 241, 0.35);
+
+  /* Platform Colors */
+  --kick-color: #53FC18;
+  --kick-glow: rgba(83, 252, 24, 0.35);
+  --kick-bg: rgba(83, 252, 24, 0.12);
+
+  --youtube-color: #ff3333;
+  --youtube-glow: rgba(255, 51, 51, 0.35);
+  --youtube-bg: rgba(255, 51, 51, 0.12);
+
+  --tiktok-color: #00f2fe;
+  --tiktok-alt: #ff0050;
+  --tiktok-glow: rgba(0, 242, 254, 0.35);
+  --tiktok-bg: rgba(0, 242, 254, 0.12);
+
+  --status-connected: #10b981;
+  --status-disconnected: #ef4444;
+  --status-connecting: #f59e0b;
+
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-pill: 9999px;
+
+  --transition-fast: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-smooth: 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Reset & Base Styles */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  background-color: var(--bg-dark);
+  color: var(--text-main);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* OBS Overlay Mode Override */
+body.mode-overlay {
+  background: transparent !important;
+  overflow: hidden;
+}
+
+/* App Wrapper Layout */
+.app-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* Header Navbar */
+.navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 2rem;
+  background: rgba(11, 15, 25, 0.95);
+  border-bottom: 1px solid var(--border-glass);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-icon {
+  width: 42px;
+  height: 42px;
+  background: var(--accent-primary);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+
+.brand-title {
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: var(--text-main);
+  letter-spacing: -0.5px;
+}
+
+.brand-subtitle {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* Navbar Status Badges */
+.platform-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  font-size: 0.82rem;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-glass);
+  transition: var(--transition-fast);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--status-disconnected);
+}
+
+.status-dot.active {
+  background: var(--status-connected);
+}
+
+.status-pill.kick { border-color: rgba(83, 252, 24, 0.3); }
+.status-pill.kick .status-dot.active { background: var(--kick-color); }
+
+.status-pill.youtube { border-color: rgba(255, 51, 51, 0.3); }
+.status-pill.youtube .status-dot.active { background: var(--youtube-color); }
+
+.status-pill.tiktok { border-color: rgba(0, 242, 254, 0.3); }
+.status-pill.tiktok .status-dot.active { background: var(--tiktok-color); }
+
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Primary Button Styling */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: var(--radius-md);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: var(--transition-fast);
+  text-decoration: none;
+}
+
+.btn-primary {
+  background: var(--accent-primary);
+  color: #fff;
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  background: #4f46e5;
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-main);
+  border-color: var(--border-glass);
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: var(--border-glass-glow);
+}
+
+.btn-accent-tts {
+  background: #64748b;
+  color: #fff;
+}
+
+.btn-accent-tts:hover {
+  transform: translateY(-2px);
+  background: #475569;
+}
+
+.btn-obs {
+  background: #10b981;
+  color: #fff;
+}
+
+.btn-obs:hover {
+  transform: translateY(-2px);
+  background: #059669;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  border-radius: var(--radius-sm);
+}
+
+/* Dashboard Layout Grid */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 1.5rem;
+  padding: 1.5rem 2rem;
+  max-width: 1600px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+@media (max-width: 1200px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Card Container */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  transition: var(--transition-fast);
+}
+
+.card:hover {
+  border-color: var(--border-glass-glow);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--border-glass);
+}
+
+.card-title {
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.15rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.card-title-icon {
+  font-size: 1.3rem;
+}
+
+/* Navigation Tabs */
+.tabs-header {
+  display: flex;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 6px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-glass);
+  margin-bottom: 1.5rem;
+  overflow-x: auto;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.88rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition-fast);
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.tab-btn:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.tab-btn.active {
+  background: rgba(99, 102, 241, 0.15);
+  color: #fff;
+  border: 1px solid rgba(99, 102, 241, 0.4);
+}
+
+/* Tab Panels */
+.tab-content {
+  display: none;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+/* Form Controls */
+.form-group {
+  margin-bottom: 1.2rem;
+}
+
+.form-label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 0.4rem;
+}
+
+.form-input, .form-select, .form-textarea {
+  width: 100%;
+  padding: 11px 15px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-md);
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 0.9rem;
+  transition: var(--transition-fast);
+}
+
+.form-input:focus, .form-select:focus, .form-textarea:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+
+.form-hint {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  margin-top: 0.35rem;
+}
+
+/* Input Row Layout */
+.input-group {
+  display: flex;
+  gap: 10px;
+}
+
+.input-group .form-input {
+  flex: 1;
+}
+
+/* Switch Toggle Styling */
+.switch-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-md);
+  margin-bottom: 0.8rem;
+}
+
+.switch-label {
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 46px;
+  height: 24px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: rgba(255, 255, 255, 0.15);
+  transition: .3s;
+  border-radius: 24px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .3s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background: var(--accent-primary);
+}
+
+input:checked + .slider:before {
+  transform: translateX(22px);
+}
+
+/* Range Sliders */
+.range-container {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.range-slider {
+  flex: 1;
+  accent-color: var(--accent-primary);
+  height: 6px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.range-value {
+  font-family: 'Fira Code', monospace;
+  font-size: 0.85rem;
+  font-weight: 600;
+  min-width: 45px;
+  text-align: right;
+  color: var(--accent-primary);
+}
+
+/* Live Preview Box in Dashboard */
+.preview-container {
+  background: #0f172a;
+  border: 2px dashed rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-lg);
+  height: 380px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 1rem;
+}
+
+.preview-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(8px);
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border: 1px solid var(--border-glass);
+}
+
+/* ==========================================================================
+   OBS OVERLAY RENDER ENGINE & THEMES
+   ========================================================================== */
+
+.obs-overlay-wrapper {
+  width: 100vw;
+  height: 100vh;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  pointer-events: none;
+  background: transparent;
+}
+
+.chat-stream-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 520px;
+  width: 100%;
+  list-style: none;
+}
+
+/* Individual Chat Message Card */
+.chat-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  font-size: calc(var(--overlay-font-size, 15px));
+  line-height: 1.45;
+  word-break: break-word;
+  transition: transform 0.3s ease, opacity 0.4s ease;
+  position: relative;
+}
+
+.chat-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+}
+
+.chat-content-box {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-header-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+
+.platform-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.platform-badge.kick {
+  background: var(--kick-color);
+  color: #000;
+}
+
+.platform-badge.youtube {
+  background: var(--youtube-color);
+  color: #fff;
+}
+
+.platform-badge.tiktok {
+  background: var(--tiktok-color);
+  color: #000;
+}
+
+.chat-author {
+  font-weight: 700;
+  font-size: 0.95em;
+  color: #ffffff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
+
+.chat-author.kick-author { color: var(--kick-color); }
+.chat-author.youtube-author { color: #ff6b6b; }
+.chat-author.tiktok-author { color: var(--tiktok-color); }
+
+.chat-text {
+  font-weight: 500;
+  color: #f8fafc;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+}
+
+/* --------------------------------------------------------------------------
+   THEME 1: Gamer Neon (Default)
+   -------------------------------------------------------------------------- */
+.theme-gamer-neon .chat-card {
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(10px);
+  border-left: 4px solid var(--accent-primary);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.theme-gamer-neon .chat-card.kick { border-left-color: var(--kick-color); box-shadow: 0 4px 18px rgba(83, 252, 24, 0.2); }
+.theme-gamer-neon .chat-card.youtube { border-left-color: var(--youtube-color); box-shadow: 0 4px 18px rgba(255, 51, 51, 0.2); }
+.theme-gamer-neon .chat-card.tiktok { border-left-color: var(--tiktok-color); box-shadow: 0 4px 18px rgba(0, 242, 254, 0.2); }
+
+/* --------------------------------------------------------------------------
+   THEME 2: Cyberpunk Dark
+   -------------------------------------------------------------------------- */
+.theme-cyberpunk .chat-card {
+  background: rgba(5, 5, 10, 0.9);
+  border: 1px solid rgba(0, 242, 254, 0.3);
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+}
+.theme-cyberpunk .chat-author { font-family: 'Fira Code', monospace; text-transform: uppercase; letter-spacing: 0.5px; }
+
+/* --------------------------------------------------------------------------
+   THEME 3: Glassmorphism
+   -------------------------------------------------------------------------- */
+.theme-glassmorphism .chat-card {
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.37);
+}
+
+/* --------------------------------------------------------------------------
+   THEME 4: Minimal Floating
+   -------------------------------------------------------------------------- */
+.theme-minimal .chat-card {
+  background: rgba(0, 0, 0, 0.65);
+  border-radius: 50px;
+  padding: 8px 18px;
+  backdrop-filter: blur(6px);
+}
+
+/* --------------------------------------------------------------------------
+   THEME 5: Bubble Chat
+   -------------------------------------------------------------------------- */
+.theme-bubble .chat-card {
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.9));
+  border-radius: 20px 20px 20px 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+}
+
+/* Entrance Animations */
+.anim-slide-left {
+  animation: animSlideLeft 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.anim-pop-up {
+  animation: animPopUp 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+.anim-fade-in {
+  animation: animFadeIn 0.3s ease forwards;
+}
+
+.anim-bounce {
+  animation: animBounce 0.4s ease forwards;
+}
+
+@keyframes animSlideLeft {
+  from { opacity: 0; transform: translateX(-40px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes animPopUp {
+  from { opacity: 0; transform: translateY(30px) scale(0.9); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes animFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes animBounce {
+  0% { opacity: 0; transform: translateY(20px); }
+  60% { opacity: 1; transform: translateY(-5px); }
+  100% { transform: translateY(0); }
+}
+
+/* Hide animation */
+.chat-card.hiding {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.95);
+  transition: all 0.5s ease;
+}
+
+/* ============================================================
+   VIEWCOUNT BAR (transparan + blur / glassmorphism)
+   Dipakai di overlay OBS dan pratinjau dashboard.
+   ============================================================ */
+.viewcount-bar {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  padding: 10px 24px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.35);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  color: #f8fafc;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.viewcount-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.viewcount-item b {
+  font-weight: 800;
+}
+
+/* Pratinjau inline bar viewcount di pengaturan dashboard (bukan absolute) */
+.viewcount-bar.vc-inline {
+  position: static;
+  left: auto;
+  top: auto;
+  transform: none;
+  width: auto;
+}
+
+.vc-preview-box {
+  background: rgba(15, 23, 42, 0.35);
+  border: 1px dashed rgba(148, 163, 184, 0.35);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+/* Halaman overlay viewcount terpisah (OBS Browser Source kecil) */
+body.mode-viewcount {
+  background: transparent;
+  overflow: hidden;
+}
+
+.vc-overlay-wrapper {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.vc-overlay-wrapper .viewcount-bar {
+  position: static;
+  left: auto;
+  top: auto;
+  transform: none;
+}

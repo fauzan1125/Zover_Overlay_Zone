@@ -1,0 +1,928 @@
+/* ==========================================================================
+   ZoVer Dashboard Control Panel - Obsidian Telemetry Design System
+   Tailored for Bootstrap 5 & Technical Broadcast Minimalist Aesthetics
+   Loaded exclusively in index.html
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Design Tokens & Root Variables
+   -------------------------------------------------------------------------- */
+:root {
+  /* Surface Substrates (Obsidian Palette) */
+  --ot-bg: #0B0F17;                  /* Base Deck: Deep Obsidian Void */
+  --ot-surface-lowest: #070A0F;       /* Inset Wells & Sidebar Root */
+  --ot-surface-low: #111827;          /* Substrate Layer: Panels, Cards */
+  --ot-surface: #181C24;              /* Primary Card Wells */
+  --ot-surface-high: #1F2937;         /* Elevated Interactive Layer */
+  --ot-surface-highest: #262A33;      /* Hovers & Tooltips */
+
+  /* Semantic Outlines & Hairlines */
+  --ot-border: #1F2937;
+  --ot-border-subtle: #161F2E;
+  --ot-border-focus: #3B82F6;
+  --ot-border-glow: rgba(59, 130, 246, 0.25);
+
+  /* Primary Electric Arc */
+  --ot-primary: #3B82F6;
+  --ot-primary-dark: #2563EB;
+  --ot-primary-hover: #1D4ED8;
+  --ot-primary-light: #ADC6FF;
+
+  /* Secondary Laser Cyan */
+  --ot-secondary: #06B6D4;
+  --ot-secondary-light: #4CD7F6;
+
+  /* Semantic Status */
+  --ot-emerald: #10B981;              /* Live / Optimal */
+  --ot-emerald-glow: rgba(16, 185, 129, 0.35);
+  --ot-amber: #F59E0B;                /* Warning / Jitter */
+  --ot-crimson: #EF4444;              /* Critical / Disconnected */
+  --ot-crimson-bg: rgba(239, 68, 68, 0.12);
+
+  /* High Legibility Text */
+  --ot-text-main: #DFE2EE;
+  --ot-text-muted: #94A3B8;
+  --ot-text-dim: #64748B;
+  --ot-text-dark: #070A0F;
+
+  /* Typography Stacks */
+  --ot-font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --ot-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Geometry & Metrics */
+  --ot-sidebar-width: 260px;
+  --ot-topbar-height: 58px;
+  --ot-radius-sm: 4px;
+  --ot-radius-md: 6px;
+  --ot-radius-lg: 8px;
+  --ot-radius-full: 9999px;
+}
+
+/* --------------------------------------------------------------------------
+   2. Base Resets & Document Setup
+   -------------------------------------------------------------------------- */
+body {
+  background-color: var(--ot-bg);
+  color: var(--ot-text-main);
+  font-family: var(--ot-font-sans);
+  font-size: 0.875rem;
+  line-height: 1.45;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Selection */
+::selection {
+  background: var(--ot-primary);
+  color: #FFFFFF;
+}
+
+/* Custom Scrollbar for Studio Operators */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--ot-surface-lowest);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--ot-surface-high);
+  border-radius: var(--ot-radius-sm);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ot-border-focus);
+}
+
+/* --------------------------------------------------------------------------
+   3. Application Shell & Sidebar
+   -------------------------------------------------------------------------- */
+.mc-app-layout {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+  background-color: var(--ot-bg);
+}
+
+.mc-sidebar {
+  width: var(--ot-sidebar-width);
+  min-width: var(--ot-sidebar-width);
+  background-color: var(--ot-surface-lowest);
+  border-right: 1px solid var(--ot-border);
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  z-index: 100;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sidebar-header {
+  height: var(--ot-topbar-height);
+  padding: 0 1rem;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background-color: var(--ot-surface-low);
+  border-bottom: 1px solid var(--ot-border);
+}
+
+.sidebar-header .app-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--ot-radius-md);
+  object-fit: cover;
+  box-shadow: 0 0 12px rgba(37, 99, 235, 0.3);
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.sidebar-header .brand-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #FFFFFF;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sidebar-header .brand-version {
+  font-family: var(--ot-font-mono);
+  font-size: 0.65rem;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--ot-surface-high);
+  color: var(--ot-primary-light);
+  font-weight: 600;
+}
+
+.sidebar-header .brand-sub {
+  font-family: var(--ot-font-mono);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ot-text-dim);
+  line-height: 1;
+  margin-top: 2px;
+}
+
+.sidebar-nav {
+  padding: 0.75rem 0.6rem;
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-group-title {
+  font-family: var(--ot-font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  color: var(--ot-text-dim);
+  text-transform: uppercase;
+  margin-top: 1rem;
+  margin-bottom: 0.35rem;
+  padding: 0 0.5rem;
+}
+
+.nav-group-title:first-child {
+  margin-top: 0.25rem;
+}
+
+.sidebar-nav .tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--ot-radius-md);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--ot-text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  text-align: left;
+  transition: all 0.15s ease;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.sidebar-nav .tab-btn .material-symbols-outlined,
+.sidebar-nav .tab-btn i {
+  font-size: 1.15rem;
+  color: var(--ot-text-dim);
+  transition: color 0.15s ease;
+}
+
+.sidebar-nav .tab-btn:hover {
+  background: var(--ot-surface-low);
+  color: var(--ot-text-main);
+  border-color: var(--ot-border);
+}
+
+.sidebar-nav .tab-btn:hover .material-symbols-outlined,
+.sidebar-nav .tab-btn:hover i {
+  color: var(--ot-text-main);
+}
+
+.sidebar-nav .tab-btn.active {
+  background: var(--ot-primary-dark);
+  color: #FFFFFF;
+  border-color: var(--ot-primary);
+  font-weight: 600;
+  box-shadow: 0 0 12px rgba(37, 99, 235, 0.28);
+}
+
+.sidebar-nav .tab-btn.active .material-symbols-outlined,
+.sidebar-nav .tab-btn.active i {
+  color: #FFFFFF;
+}
+
+.sidebar-nav .tab-btn:focus-visible {
+  outline: 2px solid var(--ot-primary);
+  outline-offset: 2px;
+}
+
+/* Sidebar Footer */
+.sidebar-footer {
+  padding: 0.75rem;
+  background-color: var(--ot-surface-lowest);
+  border-top: 1px solid var(--ot-border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sidebar-server-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.35rem 0.65rem;
+  border-radius: var(--ot-radius-md);
+  background: var(--ot-surface-low);
+  border: 1px solid var(--ot-border);
+  font-family: var(--ot-font-mono);
+  font-size: 0.6875rem;
+}
+
+.sidebar-coffee-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--ot-radius-md);
+  background: var(--ot-surface);
+  border: 1px solid var(--ot-border);
+  color: var(--ot-text-main);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.sidebar-coffee-link:hover {
+  background: var(--ot-surface-high);
+  border-color: #374151;
+  color: #FFFFFF;
+}
+
+/* --------------------------------------------------------------------------
+   4. Topbar & Header Deck
+   -------------------------------------------------------------------------- */
+.mc-main-wrapper {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--ot-bg);
+}
+
+.mc-topbar {
+  height: var(--ot-topbar-height);
+  background: rgba(15, 19, 28, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--ot-border);
+  padding: 0 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 90;
+  gap: 1rem;
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.topbar-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--ot-font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.topbar-breadcrumb .bc-section {
+  color: var(--ot-primary-light);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.topbar-breadcrumb .bc-divider {
+  color: var(--ot-text-dim);
+}
+
+.topbar-breadcrumb .bc-page {
+  color: var(--ot-text-main);
+  font-weight: 600;
+}
+
+/* Center Connectivity Chips */
+.topbar-center {
+  display: flex;
+  align-items: center;
+}
+
+.platform-connectivity-box {
+  display: flex;
+  align-items: center;
+  background: var(--ot-surface-low);
+  border: 1px solid var(--ot-border);
+  border-radius: var(--ot-radius-md);
+  padding: 3px 6px;
+  gap: 4px;
+}
+
+.pc-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: var(--ot-radius-sm);
+  background: var(--ot-surface-lowest);
+  font-family: var(--ot-font-mono);
+  font-size: 0.6875rem;
+  color: var(--ot-text-muted);
+}
+
+.pc-chip .pc-logo {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+  border-radius: 2px;
+}
+
+.pc-chip .pc-name {
+  color: var(--ot-text-dim);
+}
+
+.pc-chip .pc-status {
+  color: var(--ot-text-main);
+  font-weight: 500;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #64748b;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.status-dot.active {
+  background: var(--ot-emerald);
+  box-shadow: 0 0 8px var(--ot-emerald);
+  animation: statusPulse 2s infinite ease-in-out;
+}
+
+@keyframes statusPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* --------------------------------------------------------------------------
+   5. Content Body & Grid Layout
+   -------------------------------------------------------------------------- */
+.mc-content-body {
+  padding: 1.25rem;
+  max-width: 1440px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.tab-content {
+  display: none;
+}
+
+.tab-content.active {
+  display: block;
+  animation: fadeInPane 0.15s ease-out;
+}
+
+@keyframes fadeInPane {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Tab Header Banner */
+.tab-header-banner {
+  background: var(--ot-surface-low);
+  border: 1px solid var(--ot-border);
+  border-radius: var(--ot-radius-lg);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.tab-header-banner .banner-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ot-text-main);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tab-header-banner .banner-desc {
+  font-size: 0.8125rem;
+  color: var(--ot-text-muted);
+  margin: 4px 0 0 0;
+}
+
+/* --------------------------------------------------------------------------
+   6. Cards & Bootstrap Overrides
+   -------------------------------------------------------------------------- */
+.card {
+  background-color: var(--ot-surface-low);
+  border: 1px solid var(--ot-border);
+  border-radius: var(--ot-radius-lg);
+  box-shadow: none;
+  color: var(--ot-text-main);
+  overflow: hidden;
+}
+
+.card-header {
+  background-color: var(--ot-surface);
+  border-bottom: 1px solid var(--ot-border);
+  padding: 0.75rem 1rem;
+  font-weight: 600;
+  color: var(--ot-text-main);
+}
+
+.card-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.card-body {
+  padding: 1rem;
+}
+
+.mc-card-logo {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  border-radius: var(--ot-radius-sm);
+  background: var(--ot-surface-lowest);
+  padding: 2px;
+  border: 1px solid var(--ot-border);
+}
+
+.mc-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--ot-radius-sm);
+  background: var(--ot-surface-lowest);
+  color: var(--ot-primary);
+  font-size: 0.875rem;
+}
+
+/* Form Controls & Inputs */
+.form-label {
+  font-family: var(--ot-font-mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ot-text-dim);
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+
+.form-control,
+.form-select {
+  background-color: var(--ot-surface-lowest);
+  border: 1px solid var(--ot-border);
+  border-radius: var(--ot-radius-md);
+  color: var(--ot-text-main);
+  font-size: 0.8125rem;
+  padding: 0.5rem 0.75rem;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.form-control:focus,
+.form-select:focus {
+  background-color: var(--ot-surface-lowest);
+  border-color: var(--ot-border-focus);
+  color: #FFFFFF;
+  box-shadow: 0 0 0 1px var(--ot-border-focus);
+  outline: none;
+}
+
+.form-control::placeholder {
+  color: #475569;
+  font-size: 0.75rem;
+}
+
+.input-group-text {
+  background-color: var(--ot-surface);
+  border: 1px solid var(--ot-border);
+  color: var(--ot-text-dim);
+  font-size: 0.8125rem;
+  border-radius: var(--ot-radius-md);
+}
+
+.form-text {
+  font-size: 0.72rem;
+  color: var(--ot-text-dim);
+  margin-top: 0.35rem;
+}
+
+/* Switches & Checkboxes */
+.form-switch .form-check-input {
+  width: 34px;
+  height: 18px;
+  background-color: var(--ot-surface-high);
+  border: 1px solid var(--ot-border);
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%2394a3b8'/%3e%3c/svg%3e");
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.form-switch .form-check-input:checked {
+  background-color: var(--ot-primary-dark);
+  border-color: var(--ot-primary);
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23ffffff'/%3e%3c/svg%3e");
+  box-shadow: 0 0 10px rgba(37, 99, 235, 0.3);
+}
+
+.form-check-input:focus {
+  box-shadow: 0 0 0 1px var(--ot-primary);
+  border-color: var(--ot-primary);
+}
+
+/* Range Sliders */
+.form-range {
+  height: 6px;
+  background: var(--ot-surface-high);
+  border-radius: var(--ot-radius-full);
+}
+
+.form-range::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--ot-primary);
+  border: 2px solid #FFFFFF;
+  cursor: pointer;
+  box-shadow: 0 0 8px rgba(37, 99, 235, 0.4);
+  transition: transform 0.1s ease;
+}
+
+.form-range::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+.mc-range-value {
+  font-family: var(--ot-font-mono);
+  font-size: 0.75rem;
+  color: var(--ot-primary-light);
+  font-weight: 600;
+}
+
+/* --------------------------------------------------------------------------
+   7. Buttons & Dropdowns
+   -------------------------------------------------------------------------- */
+.btn {
+  font-family: var(--ot-font-sans);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border-radius: var(--ot-radius-md);
+  padding: 0.45rem 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+  line-height: 1.3;
+}
+
+.btn-sm {
+  font-size: 0.75rem;
+  padding: 0.35rem 0.7rem;
+}
+
+.mc-primary,
+.btn-primary {
+  background-color: var(--ot-primary-dark);
+  border: 1px solid var(--ot-primary);
+  color: #FFFFFF;
+  box-shadow: 0 0 12px rgba(37, 99, 235, 0.25);
+}
+
+.mc-primary:hover,
+.btn-primary:hover {
+  background-color: var(--ot-primary-hover);
+  border-color: #60A5FA;
+  color: #FFFFFF;
+}
+
+.mc-primary:active,
+.btn-primary:active {
+  transform: translateY(1px);
+}
+
+.mc-ghost,
+.btn-secondary {
+  background-color: var(--ot-surface);
+  border: 1px solid var(--ot-border);
+  color: var(--ot-text-main);
+}
+
+.mc-ghost:hover,
+.btn-secondary:hover {
+  background-color: var(--ot-surface-high);
+  border-color: #374151;
+  color: #FFFFFF;
+}
+
+.mc-accent {
+  background-color: #0284C7;
+  border: 1px solid #38BDF8;
+  color: #FFFFFF;
+}
+
+.mc-accent:hover {
+  background-color: #0369A1;
+  color: #FFFFFF;
+}
+
+.mc-success {
+  background-color: #047857;
+  border: 1px solid #10B981;
+  color: #FFFFFF;
+}
+
+.mc-success:hover {
+  background-color: #065F46;
+  color: #FFFFFF;
+}
+
+.btn-beliin-kopi {
+  background: var(--ot-surface-low);
+  border: 1px solid var(--ot-border);
+  color: var(--ot-text-main);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.btn-beliin-kopi:hover {
+  background: var(--ot-surface-high);
+  border-color: #374151;
+  color: #FFFFFF;
+}
+
+/* Dropdown Menu */
+.dropdown-menu-dark {
+  background-color: var(--ot-surface);
+  border: 1px solid var(--ot-border);
+  border-radius: var(--ot-radius-lg);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+  padding: 0.4rem;
+}
+
+.dropdown-item {
+  color: var(--ot-text-main);
+  border-radius: var(--ot-radius-sm);
+  font-size: 0.8125rem;
+  padding: 0.45rem 0.75rem;
+  display: flex;
+  align-items: center;
+  transition: all 0.12s ease;
+}
+
+.dropdown-item:hover {
+  background-color: var(--ot-surface-high);
+  color: #FFFFFF;
+}
+
+/* --------------------------------------------------------------------------
+   8. Specific Feature Panels: Log, Preview, Alert Cards
+   -------------------------------------------------------------------------- */
+/* Terminal Activity Log */
+.mc-log {
+  height: 260px;
+  overflow-y: auto;
+  background-color: var(--ot-surface-lowest);
+  border: 1px solid var(--ot-border);
+  border-radius: var(--ot-radius-md);
+  padding: 0.65rem 0.85rem;
+  font-family: var(--ot-font-mono);
+  font-size: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.mc-log-line {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  word-break: break-all;
+}
+
+.mc-log-time {
+  color: var(--ot-text-dim);
+  flex-shrink: 0;
+}
+
+.mc-log-type-info { color: #94A3B8; }
+.mc-log-type-ok { color: var(--ot-emerald); }
+.mc-log-type-warn { color: var(--ot-amber); }
+.mc-log-type-err { color: var(--ot-crimson); }
+
+/* OBS Preview Box */
+.preview-container {
+  background: #000000;
+  border: 1px solid var(--ot-border);
+  border-radius: var(--ot-radius-md);
+  min-height: 280px;
+  max-height: 380px;
+  overflow-y: auto;
+  position: relative;
+  padding: 0.75rem;
+  background-image: 
+    radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+.preview-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-family: var(--ot-font-mono);
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid var(--ot-border);
+  color: var(--ot-text-dim);
+}
+
+.chat-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  color: var(--ot-text-dim);
+  text-align: center;
+  gap: 6px;
+  font-size: 0.8125rem;
+}
+
+.chat-empty-state i {
+  font-size: 1.75rem;
+  color: var(--ot-border);
+}
+
+/* Viewcount Bar Preview */
+.vc-preview-card {
+  background: #000000;
+  border: 1px solid var(--ot-border);
+  border-radius: var(--ot-radius-md);
+  padding: 1.5rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  background-image: 
+    radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+/* Status Badges */
+.badge-telemetry {
+  font-family: var(--ot-font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--ot-radius-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.badge-telemetry-green {
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--ot-emerald);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.badge-telemetry-blue {
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--ot-primary-light);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.badge-telemetry-yellow {
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--ot-amber);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+/* --------------------------------------------------------------------------
+   9. Mobile Responsiveness & Drawer
+   -------------------------------------------------------------------------- */
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  z-index: 95;
+}
+
+.btn-icon-only {
+  background: transparent;
+  border: 1px solid var(--ot-border);
+  border-radius: var(--ot-radius-md);
+  color: var(--ot-text-main);
+  padding: 0.35rem 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 991.98px) {
+  .mc-sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    transform: translateX(-100%);
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
+  }
+
+  .mc-sidebar.open {
+    transform: translateX(0);
+  }
+
+  .sidebar-backdrop.active {
+    display: block;
+  }
+
+  .topbar-center {
+    display: none; /* Hide multi chips in topbar on small screens */
+  }
+}

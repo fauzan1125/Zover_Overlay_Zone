@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="referrer" content="no-referrer">
+  <title>Live Chat Overlay - OBS</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body class="mode-overlay">
+
+  <!-- OBS BROWSER SOURCE: OVERLAY CHAT (terpisah dari overlay viewcount) -->
+  <div class="obs-overlay-wrapper" id="obs-overlay-view">
+    <ul class="chat-stream-list" id="chat-stream-list-obs">
+      <!-- Live Chat Cards render here -->
+    </ul>
+  </div>
+
+  <!-- JavaScript Modules -->
+  <script src="js/tts.js"></script>
+  <script src="js/overlay.js"></script>
+  <script src="js/connectors/kick.js"></script>
+  <script src="js/connectors/youtube.js"></script>
+  <script src="js/connectors/tiktok.js"></script>
+  <script src="js/app.js"></script>
+
+</body>
+
+</html>

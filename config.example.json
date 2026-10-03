@@ -1,0 +1,74 @@
+{
+  "kickUsername": "",
+  "ytVideoInput": "",
+  "ytApiKey": "",
+  "tiktokUsername": "",
+  "tiktokApiToken": "",
+  "ttsEnabled": true,
+  "ttsVolume": 1,
+  "ttsRate": 1,
+  "ttsPitch": 1,
+  "ttsGender": "female",
+  "ttsTemplate": "{user} berkata {message}",
+  "ttsIgnoredPrefixes": "!, /, ., $",
+  "ttsBlacklist": "kasar, toxic, badword",
+  "ttsPlatforms": {
+    "kick": true,
+    "youtube": true,
+    "tiktok": true
+  },
+  "overlayTheme": "theme-gamer-neon",
+  "overlayFontSize": 16,
+  "overlayAnimation": "anim-slide-left",
+  "overlayMaxMessages": 15,
+  "overlayHideDuration": 15,
+  "overlayShowBadges": true,
+  "overlayShowAvatars": true,
+  "viewCountEnabled": true,
+  "viewCountPlatforms": {
+    "kick": true,
+    "youtube": true,
+    "tiktok": true
+  },
+  "viewCountRefresh": 30,
+  "alertDuration": 6,
+  "alertSoundVolume": 0.8,
+  "alerts": {
+    "yt_sub": {
+      "enabled": true,
+      "title": "TERIMA KASIH {user} SUDAH SUBS",
+      "subtext": "YouTube Subscription",
+      "videoUrl": "",
+      "soundUrl": "media/alerts/default_alert.mp3"
+    },
+    "kick_sub": {
+      "enabled": true,
+      "title": "TERIMA KASIH {user} SUDAH SUBS",
+      "subtext": "Kick Subscription",
+      "videoUrl": "",
+      "soundUrl": "media/alerts/default_alert.mp3"
+    },
+    "tiktok_follow": {
+      "enabled": true,
+      "title": "TERIMA KASIH {user} SUDAH FOLLOW",
+      "subtext": "TikTok New Follower",
+      "videoUrl": "",
+      "soundUrl": "media/alerts/default_alert.mp3"
+    },
+    "tiktok_gift": {
+      "enabled": true,
+      "title": "TERIMA KASIH {user} SUDAH GIFT {gift} x{count}",
+      "subtext": "TikTok Live Gift",
+      "videoUrl": "",
+      "soundUrl": "media/alerts/default_alert.mp3"
+    },
+    "tiktok_like": {
+      "enabled": true,
+      "title": "TERIMA KASIH SEMUANYA! {count} TAP TAP LIKE TERCAPAI",
+      "subtext": "TikTok Tap-Tap Like Milestone",
+      "videoUrl": "",
+      "soundUrl": "media/alerts/default_alert.mp3",
+      "milestoneStep": 100
+    }
+  }
+}

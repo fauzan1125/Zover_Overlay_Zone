@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="referrer" content="no-referrer">
+  <title>ZoVer (Zone Overlay) - Live Chat 3 Platform & Suara Mbak Google</title>
+  <meta name="description" content="Aplikasi overlay chat live stream gabungan Kick, YouTube, dan TikTok dalam 1 OBS Browser Source dengan pembaca komentar suara Mbak Google Bahasa Indonesia.">
+
+  <!-- Typography & Icons (Geist, JetBrains Mono, Material Symbols, Bootstrap Icons) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet">
+  
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha512-jnSuA4Ss2PkkikSOLtYs8BlYIeeIK1h99ty4YfvRPAlzr377vr3CXDb7sb7eEEBYjDtcYj+AjBH3FLv5uSJuXg=="
+        crossorigin="anonymous" referrerpolicy="no-referrer">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"
+        integrity="sha512-dPXYcDub/aeb08c63jRq/k6GaKccl256JQy/AnOq7CAnEZ9FzSL9wSbcZkMp4R26vBsMLFYH4kQ67/bbV8XaCQ=="
+        crossorigin="anonymous" referrerpolicy="no-referrer">
+
+  <!-- Local Stylesheets -->
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+
+  <!-- ==========================================================================
+       DASHBOARD CONTROL PANEL - OBSIDIAN TELEMETRY ENGINE
+       ========================================================================== -->
+  <div class="mc-app-layout" id="dashboard-app">
+    
+    <!-- Mobile Sidebar Backdrop -->
+    <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+
+    <!-- 1. SIDEBAR -->
+    <aside class="mc-sidebar" id="main-sidebar">
+      <div class="sidebar-header">
+        <img src="logo_platform/logo_app.png" alt="Logo ZoVer" class="app-logo">
+        <div class="d-flex flex-column justify-content-center">
+          <div class="brand-title">
+            <span>ZoVer</span>
+            <span class="brand-version">v2.4</span>
+          </div>
+          <div class="brand-sub">Live Stream Engine</div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <!-- GROUP 1: START -->
+        <div class="nav-group-title">START</div>
+        <button class="tab-btn active" data-tab="connections" type="button">
+          <span class="material-symbols-outlined">podcasts</span>
+          <span>Connection</span>
+        </button>
+        <button class="tab-btn" data-tab="test" type="button">
+          <span class="material-symbols-outlined">play_circle</span>
+          <span>Simulasi</span>
+        </button>
+
+        <!-- GROUP 2: SET UP -->
+        <div class="nav-group-title">SET UP</div>
+        <button class="tab-btn" data-tab="overlay" type="button">
+          <span class="material-symbols-outlined">chat</span>
+          <span>Chatbox</span>
+        </button>
+        <button class="tab-btn" data-tab="tts" type="button">
+          <span class="material-symbols-outlined">campaign</span>
+          <span>Baca Komentar</span>
+        </button>
+        <button class="tab-btn" data-tab="viewcount" type="button">
+          <span class="material-symbols-outlined">visibility</span>
+          <span>Viewcount</span>
+        </button>
+        <button class="tab-btn" data-tab="alerts" type="button">
+          <span class="material-symbols-outlined">notifications_active</span>
+          <span>Alert</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-server-chip">
+          <div class="d-flex align-items-center gap-1 text-secondary">
+            <span class="material-symbols-outlined" style="font-size:15px">dns</span>
+            <span class="text-secondary fw-semibold">PORT: 8765</span>
+          </div>
+          <span class="badge-telemetry badge-telemetry-green">
+            <span class="status-dot active"></span>ONLINE
+          </span>
+        </div>
+        <a href="https://sociabuzz.com/lazuri1125/tribe" target="_blank" rel="noopener noreferrer" class="sidebar-coffee-link mt-1">
+          <span class="d-flex align-items-center gap-2">
+            <span class="material-symbols-outlined text-warning" style="font-size:16px">coffee</span>
+            <span>Beliin Kopi</span>
+          </span>
+          <span class="material-symbols-outlined text-muted" style="font-size:14px">north_east</span>
+        </a>
+      </div>
+    </aside>
+
+    <!-- 2. MAIN WRAPPER -->
+    <div class="mc-main-wrapper">
+      
+      <!-- TOPBAR -->
+      <header class="mc-topbar">
+        <!-- Left: Mobile Menu Toggle & Breadcrumb -->
+        <div class="topbar-left">
+          <button class="btn-icon-only d-lg-none" id="btn-toggle-sidebar" aria-label="Buka Menu Navigasi" type="button">
+            <span class="material-symbols-outlined" style="font-size: 20px">menu</span>
+          </button>
+          <div class="topbar-breadcrumb">
+            <span class="bc-section" id="bc-section-name">START</span>
+            <span class="bc-divider">/</span>
+            <span class="bc-page" id="bc-page-name">Connection</span>
+          </div>
+        </div>
+
+        <!-- CENTER: PLATFORM CONNECTIVITY TELEMETRY -->
+        <div class="topbar-center">
+          <div class="platform-connectivity-box">
+            <div class="pc-chip" id="pc-item-kick" title="Status Kick Live Chat">
+              <span class="status-dot" id="dot-kick"></span>
+              <img src="logo_platform/kick.png" alt="Kick" class="pc-logo">
+              <span class="pc-name">Kick:</span>
+              <span class="pc-status" id="status-text-kick">Offline</span>
+            </div>
+            <div class="pc-chip" id="pc-item-youtube" title="Status YouTube Live Chat">
+              <span class="status-dot" id="dot-youtube"></span>
+              <img src="logo_platform/youtube.png" alt="YouTube" class="pc-logo">
+              <span class="pc-name">YT:</span>
+              <span class="pc-status" id="status-text-youtube">Offline</span>
+            </div>
+            <div class="pc-chip" id="pc-item-tiktok" title="Status TikTok Live Chat">
+              <span class="status-dot" id="dot-tiktok"></span>
+              <img src="logo_platform/tiktok.jpg" alt="TikTok" class="pc-logo">
+              <span class="pc-name">TikTok:</span>
+              <span class="pc-status" id="status-text-tiktok">Offline</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Action Dropdowns & Coffee Link -->
+        <div class="topbar-right">
+          <a href="https://sociabuzz.com/lazuri1125/tribe" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-beliin-kopi" title="Dukung pembuat: Beliin Kopi">
+            <span class="material-symbols-outlined text-warning" style="font-size:16px">coffee</span>
+            <span>Beliin Kopi</span>
+          </a>
+
+          <div class="dropdown">
+            <button class="btn btn-sm mc-ghost dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="btn-preview-menu">
+              <span class="material-symbols-outlined" style="font-size:16px">visibility</span>
+              <span>Pratinjau</span>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end dropdown-menu-dark shadow">
+              <li><button class="dropdown-item py-2" id="btn-open-obs-window"><span class="material-symbols-outlined me-2 text-info" style="font-size:18px">chat</span>Buka Window Chat</button></li>
+              <li><button class="dropdown-item py-2" id="btn-open-obs-vc-window"><span class="material-symbols-outlined me-2 text-info" style="font-size:18px">visibility</span>Buka Window Viewcount</button></li>
+              <li><button class="dropdown-item py-2" id="btn-open-obs-alert-window"><span class="material-symbols-outlined me-2 text-warning" style="font-size:18px">notifications_active</span>Buka Window Alert</button></li>
+            </ul>
+          </div>
+
+          <div class="dropdown">
+            <button class="btn btn-sm mc-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="btn-copy-links-menu">
+              <span class="material-symbols-outlined" style="font-size:16px">content_copy</span>
+              <span>Salin Link OBS</span>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end dropdown-menu-dark shadow">
+              <li><button class="dropdown-item py-2" id="btn-copy-obs-url"><span class="material-symbols-outlined me-2 text-info" style="font-size:18px">chat</span>Salin Path Overlay Chat</button></li>
+              <li><button class="dropdown-item py-2" id="btn-copy-obs-vc-url"><span class="material-symbols-outlined me-2 text-info" style="font-size:18px">visibility</span>Salin Path Overlay Viewcount</button></li>
+              <li><button class="dropdown-item py-2" id="btn-copy-obs-alert-url"><span class="material-symbols-outlined me-2 text-warning" style="font-size:18px">notifications_active</span>Salin Path Overlay Alert</button></li>
+            </ul>
+          </div>
+        </div>
+      </header>
+
+      <!-- CONTENT BODY -->
+      <main class="mc-content-body">
+
+        <!-- ==================================================================
+             TAB 1: CONNECTION (START > Connection)
+             ================================================================== -->
+        <div class="tab-content active" id="tab-connections">
+          <div class="tab-header-banner">
+            <div>
+              <div class="d-flex align-items-center gap-2">
+                <h2 class="banner-title">Koneksi Stream Multi-Platform</h2>
+                <span class="badge-telemetry badge-telemetry-blue">
+                  <span class="status-dot active"></span>ENGINE INGEST READY
+                </span>
+              </div>
+              <p class="banner-desc">Hubungkan akun live streaming Kick, YouTube, dan TikTok secara bersamaan dalam satu engine terpadu.</p>
+            </div>
+          </div>
+
+          <div class="row g-3">
+            <!-- Kick Card -->
+            <div class="col-12 col-md-6 col-xl-4">
+              <div class="card h-100">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                  <div class="d-flex align-items-center gap-2">
+                    <img class="mc-card-logo" src="logo_platform/kick.png" alt="Logo Kick">
+                    <h3 class="card-title mb-0">Kick Live Chat</h3>
+                  </div>
+                  <span class="badge-telemetry badge-telemetry-green">Pusher v7.0</span>
+                </div>
+                <div class="card-body d-flex flex-column">
+                  <label class="form-label" for="input-kick-username">Kick Username / Channel</label>
+                  <div class="input-group mb-2">
+                    <span class="input-group-text"><span class="material-symbols-outlined" style="font-size:16px">account_circle</span></span>
+                    <input type="text" class="form-control" id="input-kick-username" placeholder="Contoh: lazuri1125">
+                  </div>
+                  <div class="d-flex gap-2 mt-auto pt-3">
+                    <button class="btn btn-sm mc-primary flex-fill" id="btn-connect-kick" type="button">
+                      <span class="material-symbols-outlined" style="font-size:16px">sync</span>
+                      <span>Hubungkan</span>
+                    </button>
+                    <button class="btn btn-sm mc-ghost flex-fill" id="btn-disconnect-kick" type="button">
+                      <span class="material-symbols-outlined" style="font-size:16px">power_off</span>
+                      <span>Putuskan</span>
+                    </button>
+                  </div>
+                  <div class="form-text mt-2">Menghubungkan langsung ke Kick Pusher WebSocket secara real-time tanpa delay webhook.</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- YouTube Card -->
+            <div class="col-12 col-md-6 col-xl-4">
+              <div class="card h-100">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                  <div class="d-flex align-items-center gap-2">
+                    <img class="mc-card-logo" src="logo_platform/youtube.png" alt="Logo YouTube">
+                    <h3 class="card-title mb-0">YouTube Live Chat</h3>
+                  </div>
+                  <span class="badge-telemetry badge-telemetry-blue">Multi-Live</span>
+                </div>
+                <div class="card-body d-flex flex-column">
+                  <label class="form-label" for="input-yt-url">YouTube Live URL / Video ID (MULTI-LIVE)</label>
+                  <div class="input-group mb-2">
+                    <span class="input-group-text"><span class="material-symbols-outlined" style="font-size:16px">link</span></span>
+                    <input type="text" class="form-control" id="input-yt-url" placeholder="https://youtu.be/AAA, https://youtu.be/BBB">
+                  </div>
+                  <label class="form-label" for="input-yt-key">YouTube Data API Key (Opsional)</label>
+                  <div class="input-group mb-2">
+                    <span class="input-group-text"><span class="material-symbols-outlined" style="font-size:16px">key</span></span>
+                    <input type="password" class="form-control" id="input-yt-key" placeholder="Kosongkan = Scraper Mode" autocomplete="off">
+                  </div>
+                  <div class="d-flex gap-2 mt-auto pt-3">
+                    <button class="btn btn-sm mc-primary flex-fill" id="btn-connect-youtube" type="button">
+                      <span class="material-symbols-outlined" style="font-size:16px">sync</span>
+                      <span>Hubungkan</span>
+                    </button>
+                    <button class="btn btn-sm mc-ghost flex-fill" id="btn-disconnect-youtube" type="button">
+                      <span class="material-symbols-outlined" style="font-size:16px">power_off</span>
+                      <span>Putuskan</span>
+                    </button>
+                  </div>
+                  <div class="form-text mt-2">Dukung beberapa link live sekaligus (portrait & landscape) dipisah tanda koma.</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- TikTok Card -->
+            <div class="col-12 col-md-6 col-xl-4">
+              <div class="card h-100">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                  <div class="d-flex align-items-center gap-2">
+                    <img class="mc-card-logo" src="logo_platform/tiktok.jpg" alt="Logo TikTok">
+                    <h3 class="card-title mb-0">TikTok Live Chat</h3>
+                  </div>
+                  <span class="badge-telemetry badge-telemetry-yellow">Bridge Proxy</span>
+                </div>
+                <div class="card-body d-flex flex-column">
+                  <label class="form-label" for="input-tiktok-username">TikTok Username (@username)</label>
+                  <div class="input-group mb-2">
+                    <span class="input-group-text"><span class="material-symbols-outlined" style="font-size:16px">alternate_email</span></span>
+                    <input type="text" class="form-control" id="input-tiktok-username" placeholder="Contoh: @streamer_tiktok">
+                  </div>
+                  <label class="form-label" for="input-tiktok-token">IndoFinity API Token</label>
+                  <div class="input-group mb-2">
+                    <span class="input-group-text"><span class="material-symbols-outlined" style="font-size:16px">shield</span></span>
+                    <input type="password" class="form-control" id="input-tiktok-token" value="" placeholder="Masukkan Token API IndoFinity" autocomplete="off">
+                  </div>
+                  <div class="d-flex gap-2 mt-auto pt-3">
+                    <button class="btn btn-sm mc-primary flex-fill" id="btn-connect-tiktok" type="button">
+                      <span class="material-symbols-outlined" style="font-size:16px">sync</span>
+                      <span>Hubungkan</span>
+                    </button>
+                    <button class="btn btn-sm mc-ghost flex-fill" id="btn-disconnect-tiktok" type="button">
+                      <span class="material-symbols-outlined" style="font-size:16px">power_off</span>
+                      <span>Putuskan</span>
+                    </button>
+                  </div>
+                  <div class="form-text mt-2">
+                    <div><b class="text-success">IndoFinity:</b> Chat, Gift, &amp; Tap-tap (ws://127.0.0.1:62024)</div>
+                    <div class="mt-1"><b class="text-info">TikFinity:</b> Follower Alert &amp; Viewcount (ws://localhost:21213)</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ==================================================================
+             TAB 2: SIMULASI (START > Simulasi)
+             ================================================================== -->
+        <div class="tab-content" id="tab-test">
+          <div class="tab-header-banner">
+            <div>
+              <div class="d-flex align-items-center gap-2">
+                <h2 class="banner-title">Simulasi Live Chat & Suara Mbak Google</h2>
+                <span class="badge-telemetry badge-telemetry-green">
+                  <span class="status-dot active"></span>SANDBOX READY
+                </span>
+              </div>
+              <p class="banner-desc">Kirim pesan tiruan untuk menguji render visual OBS dan memastikan pembacaan suara komentar berjalan normal.</p>
+            </div>
+          </div>
+
+          <div class="row g-3">
+            <div class="col-12 col-lg-5">
+              <div class="card h-100">
+                <div class="card-header d-flex align-items-center gap-2">
+                  <span class="material-symbols-outlined text-primary" style="font-size:20px">smart_toy</span>
+                  <h3 class="card-title mb-0">Kirim Pesan Simulasi</h3>
+                </div>
+                <div class="card-body d-flex flex-column justify-content-between">
+                  <p class="form-text mb-3">Klik tombol di bawah untuk menyimulasikan pesan masuk dari masing-masing platform langsung ke overlay OBS dan TTS:</p>
+                  <div class="d-grid gap-2">
+                    <button class="btn mc-ghost text-start py-2.5 px-3" id="btn-test-kick-msg" type="button" style="border-left: 3px solid #53FC18">
+                      <span class="material-symbols-outlined me-2" style="color:#53FC18; font-size:18px">play_circle</span>
+                      <span>Kirim Uji Chat <b>Kick Stream</b></span>
+                    </button>
+                    <button class="btn mc-ghost text-start py-2.5 px-3" id="btn-test-yt-msg" type="button" style="border-left: 3px solid #ff3333">
+                      <span class="material-symbols-outlined me-2" style="color:#ff3333; font-size:18px">video_library</span>
+                      <span>Kirim Uji Chat <b>YouTube Live</b></span>
+                    </button>
+                    <button class="btn mc-ghost text-start py-2.5 px-3" id="btn-test-tiktok-msg" type="button" style="border-left: 3px solid #00f2fe">
+                      <span class="material-symbols-outlined me-2" style="color:#00f2fe; font-size:18px">music_note</span>
+                      <span>Kirim Uji Chat <b>TikTok Live</b></span>
+                    </button>
+                    <button class="btn mc-accent text-start py-2.5 px-3 mt-2" id="btn-test-tts" type="button">
+                      <span class="material-symbols-outlined me-2" style="font-size:18px">record_voice_over</span>
+                      <span>Uji Audio Suara <b>Mbak Google Langsung</b></span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-12 col-lg-7">
+              <div class="card h-100">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="material-symbols-outlined text-secondary" style="font-size:20px">terminal</span>
+                    <h3 class="card-title mb-0">Log & Konsol Aktivitas</h3>
+                  </div>
+                  <span class="badge-telemetry badge-telemetry-blue">SYSTEM LOG</span>
+                </div>
+                <div class="card-body">
+                  <div class="mc-log" id="activity-log"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ==================================================================
+             TAB 3: CHATBOX (SET UP > Chatbox)
+             ================================================================== -->
+        <div class="tab-content" id="tab-overlay">
+          <div class="tab-header-banner">
+            <div>
+              <div class="d-flex align-items-center gap-2">
+                <h2 class="banner-title">Kustomisasi Visual Chatbox OBS</h2>
+                <span class="badge-telemetry badge-telemetry-blue">OBS CEF RENDER</span>
+              </div>
+              <p class="banner-desc">Atur tema desain, animasi masuk, batas pesan, dan pantau hasil tampilannya secara langsung di panel pratinjau.</p>
+            </div>
+            <div class="d-flex gap-2">
+              <button class="btn btn-sm mc-primary" id="btn-copy-obs-url-chatbox" onclick="document.getElementById('btn-copy-obs-url').click()" type="button">
+                <span class="material-symbols-outlined" style="font-size:16px">content_copy</span>
+                <span>Salin URL Chatbox</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="row g-3">
+            <div class="col-12 col-xl-7">
+              <div class="card mb-3">
+                <div class="card-header d-flex align-items-center gap-2">
+                  <span class="material-symbols-outlined text-primary" style="font-size:20px">palette</span>
+                  <h3 class="card-title mb-0">Gaya & Perilaku Chat</h3>
+                </div>
+                <div class="card-body">
+                  <div class="row g-3">
+                    <div class="col-12 col-md-6">
+                      <label class="form-label" for="select-overlay-theme">Tema Tampilan Chatbox</label>
+                      <select class="form-select mb-3" id="select-overlay-theme">
+                        <option value="theme-gamer-neon">Gamer Neon (Glow Border & Dark Glass)</option>
+                        <option value="theme-cyberpunk">Cyberpunk Dark (Modern Futuristic Cut)</option>
+                        <option value="theme-glassmorphism">Glassmorphic Glow (Transparan Mewah)</option>
+                        <option value="theme-minimal">Minimal Floating (Kapsul Dark Simpel)</option>
+                        <option value="theme-bubble">Bubble Chat (Gelembung Pesan Modern)</option>
+                      </select>
+
+                      <label class="form-label" for="select-overlay-anim">Animasi Masuk</label>
+                      <select class="form-select" id="select-overlay-anim">
+                        <option value="anim-slide-left">Slide in dari Kiri</option>
+                        <option value="anim-pop-up">Pop Up dari Bawah</option>
+                        <option value="anim-fade-in">Fade In Kehalusan</option>
+                        <option value="anim-bounce">Bounce In Membal</option>
+                      </select>
+                    </div>
+
+                    <div class="col-12 col-md-6">
+                      <label class="form-label d-flex justify-content-between" for="range-font-size">
+                        <span>Ukuran Teks Chat</span> <span class="mc-range-value" id="val-font-size">16px</span>
+                      </label>
+                      <input type="range" class="form-range mb-3" id="range-font-size" min="12" max="28" step="1" value="16">
+
+                      <label class="form-label d-flex justify-content-between" for="range-hide-duration">
+                        <span>Sembunyi Otomatis (Auto-Hide)</span> <span class="mc-range-value" id="val-hide-duration">15s</span>
+                      </label>
+                      <input type="range" class="form-range" id="range-hide-duration" min="0" max="60" step="5" value="15">
+                      <div class="form-text">Setel ke 0 jika pesan ingin tetap tampil selamanya di layar.</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Live Preview Visual OBS -->
+            <div class="col-12 col-xl-5">
+              <div class="card h-100">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="material-symbols-outlined text-secondary" style="font-size:20px">visibility</span>
+                    <h3 class="card-title mb-0">Live Preview Chatbox OBS</h3>
+                  </div>
+                  <span class="badge-telemetry badge-telemetry-blue">1920x1080</span>
+                </div>
+                <div class="card-body">
+                  <div class="preview-container">
+                    <span class="preview-badge">Transparan OBS</span>
+                    <ul class="chat-stream-list" id="chat-stream-list">
+                      <li class="chat-empty-state" id="chat-empty-state">
+                        <span class="material-symbols-outlined" style="font-size:32px">chat_bubble_outline</span>
+                        <span>Menunggu pesan live chat...</span>
+                        <small>Pesan akan muncul di sini saat live berlangsung atau gunakan tab Simulasi.</small>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ==================================================================
+             TAB 4: BACA KOMENTAR (SET UP > Baca Komentar)
+             ================================================================== -->
+        <div class="tab-content" id="tab-tts">
+          <div class="tab-header-banner">
+            <div>
+              <div class="d-flex align-items-center gap-2">
+                <h2 class="banner-title">Pengaturan Pembaca Komentar (Mbak Google TTS)</h2>
+                <span class="badge-telemetry badge-telemetry-green">ID-ID_NEURAL</span>
+              </div>
+              <p class="banner-desc">Membacakan setiap pesan masuk di stream dengan suara perempuan Bahasa Indonesia secara real-time.</p>
+            </div>
+            <div class="d-flex align-items-center gap-2 bg-surface-lowest p-2 rounded">
+              <span class="font-label-mono text-muted" style="font-size:0.75rem">MASTER TTS:</span>
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" id="switch-tts-enable" checked>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-body">
+              <div class="row g-4">
+                <div class="col-12 col-lg-6">
+                  <div class="mb-4">
+                    <label class="form-label d-flex justify-content-between" for="range-tts-vol">
+                      <span>Volume Suara</span> <span class="mc-range-value" id="val-tts-vol">100%</span>
+                    </label>
+                    <input type="range" class="form-range" id="range-tts-vol" min="0" max="1" step="0.1" value="1">
+                  </div>
+
+                  <div class="mb-4">
+                    <label class="form-label d-flex justify-content-between" for="range-tts-rate">
+                      <span>Kecepatan Bicara</span> <span class="mc-range-value" id="val-tts-rate">1x</span>
+                    </label>
+                    <input type="range" class="form-range" id="range-tts-rate" min="0.5" max="2" step="0.1" value="1">
+                  </div>
+
+                  <div class="mb-3">
+                    <label class="form-label d-flex justify-content-between" for="range-tts-pitch">
+                      <span>Nada Suara (Pitch)</span> <span class="mc-range-value" id="val-tts-pitch">1</span>
+                    </label>
+                    <input type="range" class="form-range" id="range-tts-pitch" min="0.5" max="1.5" step="0.1" value="1">
+                  </div>
+                </div>
+
+                <div class="col-12 col-lg-6">
+                  <div class="mb-3">
+                    <label class="form-label" for="input-tts-template">Format Teks Pembacaan Pesan</label>
+                    <input type="text" class="form-control" id="input-tts-template" value="{user} berkata {message}">
+                    <div class="form-text">Variabel tersedia: <code>{user}</code>, <code>{message}</code>, <code>{platform}</code>.</div>
+                  </div>
+
+                  <div class="mb-4">
+                    <label class="form-label" for="input-tts-blacklist">Filter Kata Kasar (pisahkan dengan koma)</label>
+                    <input type="text" class="form-control" id="input-tts-blacklist" value="kasar, toxic, badword">
+                    <div class="form-text">Komentar yang memuat kata di atas akan dilewati dan tidak dibacakan.</div>
+                  </div>
+
+                  <button class="btn mc-accent w-100 py-2.5" id="btn-test-tts-tab" onclick="document.getElementById('btn-test-tts').click()" type="button">
+                    <span class="material-symbols-outlined" style="font-size:18px">volume_up</span>
+                    <span>Uji Suara Mbak Google Sekarang</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ==================================================================
+             TAB 5: VIEWCOUNT (SET UP > Viewcount)
+             ================================================================== -->
+        <div class="tab-content" id="tab-viewcount">
+          <div class="tab-header-banner">
+            <div>
+              <div class="d-flex align-items-center gap-2">
+                <h2 class="banner-title">Pengaturan Bar ViewCount Platform</h2>
+                <span class="badge-telemetry badge-telemetry-green">REALTIME SYNC</span>
+              </div>
+              <p class="banner-desc">Bar penonton live transparan dan modern untuk ditempelkan di OBS Browser Source.</p>
+            </div>
+            <div class="d-flex align-items-center gap-2 bg-surface-lowest p-2 rounded">
+              <span class="font-label-mono text-muted" style="font-size:0.75rem">STATUS BAR:</span>
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" id="switch-viewcount-enable" checked>
+              </div>
+            </div>
+          </div>
+
+          <div class="row g-3">
+            <div class="col-12 col-lg-6">
+              <div class="card h-100">
+                <div class="card-header d-flex align-items-center gap-2">
+                  <span class="material-symbols-outlined text-primary" style="font-size:20px">tune</span>
+                  <h3 class="card-title mb-0">Pilihan Platform Tampil</h3>
+                </div>
+                <div class="card-body">
+                  <p class="form-text mb-3">Centang platform mana saja yang ingin dimunculkan jumlah penonton livenya:</p>
+                  <div class="d-flex flex-column gap-3 mb-4">
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" id="chk-vc-kick" checked>
+                      <label class="form-check-label ms-2 d-flex align-items-center gap-1.5" for="chk-vc-kick">
+                        <img src="logo_platform/kick.png" alt="Kick" width="16" class="me-1">
+                        <span>Kick Viewers</span>
+                      </label>
+                    </div>
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" id="chk-vc-youtube" checked>
+                      <label class="form-check-label ms-2 d-flex align-items-center gap-1.5" for="chk-vc-youtube">
+                        <img src="logo_platform/youtube.png" alt="YouTube" width="16" class="me-1">
+                        <span>YouTube Viewers</span>
+                      </label>
+                    </div>
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" id="chk-vc-tiktok" checked>
+                      <label class="form-check-label ms-2 d-flex align-items-center gap-1.5" for="chk-vc-tiktok">
+                        <img src="logo_platform/tiktok.jpg" alt="TikTok" width="16" class="me-1">
+                        <span>TikTok Viewers</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div class="d-flex gap-2">
+                    <button class="btn btn-sm mc-primary flex-fill" id="btn-copy-obs-vc-url-tab" onclick="document.getElementById('btn-copy-obs-vc-url').click()" type="button">
+                      <span class="material-symbols-outlined" style="font-size:16px">content_copy</span>
+                      <span>Salin Path Viewcount</span>
+                    </button>
+                    <button class="btn btn-sm mc-ghost flex-fill" id="btn-open-obs-vc-window-tab" onclick="document.getElementById('btn-open-obs-vc-window').click()" type="button">
+                      <span class="material-symbols-outlined" style="font-size:16px">open_in_new</span>
+                      <span>Pratinjau</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-12 col-lg-6">
+              <div class="card h-100">
+                <div class="card-header d-flex align-items-center gap-2">
+                  <span class="material-symbols-outlined text-secondary" style="font-size:20px">visibility</span>
+                  <h3 class="card-title mb-0">Pratinjau Bar ViewCount</h3>
+                </div>
+                <div class="card-body d-flex flex-column justify-content-center">
+                  <div class="vc-preview-card">
+                    <div class="viewcount-bar vc-inline" id="viewcount-bar"></div>
+                  </div>
+                  <div class="form-text text-center mt-3">Bar ini mengapung di bagian atas layar OBS dengan gaya Obsidian Telemetry transparan.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ==================================================================
+             TAB 6: ALERT (SET UP > Alert)
+             ================================================================== -->
+        <div class="tab-content" id="tab-alerts">
+          <div class="tab-header-banner">
+            <div>
+              <div class="d-flex align-items-center gap-2">
+                <h2 class="banner-title">Pengaturan Alert & Soundboard</h2>
+                <span class="badge-telemetry badge-telemetry-green">QUEUE: READY</span>
+              </div>
+              <p class="banner-desc">Atur animasi video/GIF kotak 1:1 transparan dan file MP3 soundboard untuk subs, gift, follower, dan tap-tap like secara real-time ke OBS Browser Source.</p>
+            </div>
+            <div class="d-flex gap-2">
+              <button class="btn btn-sm mc-primary" id="btn-copy-obs-alert-url-tab" onclick="document.getElementById('btn-copy-obs-alert-url').click()" type="button">
+                <span class="material-symbols-outlined" style="font-size:16px">content_copy</span>
+                <span>Salin URL Alert OBS</span>
+              </button>
+              <button class="btn btn-sm mc-ghost" id="btn-open-obs-alert-window-tab" onclick="document.getElementById('btn-open-obs-alert-window').click()" type="button">
+                <span class="material-symbols-outlined" style="font-size:16px">open_in_new</span>
+                <span>Pratinjau Layar Penuh</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- PENGATURAN UMUM TIMING & SOUNDBOARD -->
+          <div class="card mb-3">
+            <div class="card-header d-flex align-items-center gap-2">
+              <span class="material-symbols-outlined text-secondary" style="font-size:20px">tune</span>
+              <h3 class="card-title mb-0">Global Timing & Audio Deck</h3>
+            </div>
+            <div class="card-body">
+              <div class="row g-3">
+                <div class="col-12 col-md-6">
+                  <label class="form-label d-flex justify-content-between" for="range-alert-duration">
+                    <span>Durasi Tampil Alert</span> <span class="mc-range-value" id="val-alert-duration">6 detik</span>
+                  </label>
+                  <input type="range" class="form-range" id="range-alert-duration" min="2" max="20" step="1" value="6">
+                  <div class="form-text">Lama durasi video/gif dan teks ucapan tampil di OBS sebelum antrean berganti.</div>
+                </div>
+                <div class="col-12 col-md-6">
+                  <label class="form-label d-flex justify-content-between" for="range-alert-volume">
+                    <span>Volume Soundboard Audio</span> <span class="mc-range-value" id="val-alert-volume">80%</span>
+                  </label>
+                  <input type="range" class="form-range" id="range-alert-volume" min="0" max="1" step="0.05" value="0.8">
+                  <div class="form-text">Tingkat kekerasan pemutaran MP3 soundboard saat notifikasi muncul di live stream.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- KARTU ALERT PER EVENT (5 EVENTS) -->
+          <div class="row g-3">
+            
+            <!-- 1. YOUTUBE SUBS -->
+            <div class="col-12">
+              <div class="card">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                  <div class="d-flex align-items-center gap-2">
+                    <img class="mc-card-logo" src="logo_platform/youtube.png" alt="YouTube">
+                    <h3 class="card-title mb-0">YouTube Subscription Alert</h3>
+                  </div>
+                  <div class="form-check form-switch mb-0">
+                    <input class="form-check-input" type="checkbox" id="switch-alert-yt_sub" checked>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <div class="row g-3">
+                    <div class="col-12 col-lg-6">
+                      <label class="form-label" for="input-title-yt_sub">Format Teks Ucapan</label>
+                      <input type="text" class="form-control mb-2" id="input-title-yt_sub" value="TERIMA KASIH {user} SUDAH SUBS">
+                      <div class="form-text mb-3">Variabel tersedia: <code>{user}</code>, <code>{platform}</code></div>
+
+                      <label class="form-label">Video / GIF Alert (Kotak 1:1 Transparan)</label>
+                      <div class="input-group mb-2">
+                        <input type="file" class="form-control" id="file-video-yt_sub" accept="video/mp4,video/webm,image/gif,image/webp,image/png,image/jpeg">
+                        <button class="btn mc-ghost" type="button" id="btn-upload-video-yt_sub"><span class="material-symbols-outlined" style="font-size:16px">upload</span> Upload</button>
+                      </div>
+                      <input type="text" class="form-control" id="url-video-yt_sub" placeholder="Atau tempel link URL video/mp4/gif di sini">
+                      <div class="form-text" id="status-video-yt_sub">Default: Kotak Transparan</div>
+                    </div>
+
+                    <div class="col-12 col-lg-6">
+                      <label class="form-label">Soundboard Audio Alert (.MP3)</label>
+                      <div class="input-group mb-2">
+                        <input type="file" class="form-control" id="file-sound-yt_sub" accept="audio/mp3,audio/mpeg,audio/wav,audio/ogg">
+                        <button class="btn mc-ghost" type="button" id="btn-upload-sound-yt_sub"><span class="material-symbols-outlined" style="font-size:16px">upload</span> Upload</button>
+                      </div>
+                      <input type="text" class="form-control mb-2" id="url-sound-yt_sub" placeholder="Atau tempel link URL mp3 di sini">
+                      <div class="form-text mb-3" id="status-sound-yt_sub">Default: media/alerts/default_alert.mp3</div>
+
+                      <button class="btn btn-sm mc-primary w-100 py-2" id="btn-test-alert-yt_sub" type="button">
+                        <span class="material-symbols-outlined" style="font-size:16px">play_arrow</span>
+                        <span>Uji Alert YouTube Subs</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. KICK SUBS -->
+            <div class="col-12">
+              <div class="card">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                  <div class="d-flex align-items-center gap-2">
+                    <img class="mc-card-logo" src="logo_platform/kick.png" alt="Kick">
+                    <h3 class="card-title mb-0">Kick Subscription Alert</h3>
+                  </div>
+                  <div class="form-check form-switch mb-0">
+                    <input class="form-check-input" type="checkbox" id="switch-alert-kick_sub" checked>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <div class="row g-3">
+                    <div class="col-12 col-lg-6">
+                      <label class="form-label" for="input-title-kick_sub">Format Teks Ucapan</label>
+                      <input type="text" class="form-control mb-2" id="input-title-kick_sub" value="TERIMA KASIH {user} SUDAH SUBS">
+                      <div class="form-text mb-3">Variabel tersedia: <code>{user}</code>, <code>{platform}</code></div>
+
+                      <label class="form-label">Video / GIF Alert (Kotak 1:1 Transparan)</label>
+                      <div class="input-group mb-2">
+                        <input type="file" class="form-control" id="file-video-kick_sub" accept="video/mp4,video/webm,image/gif,image/webp,image/png,image/jpeg">
+                        <button class="btn mc-ghost" type="button" id="btn-upload-video-kick_sub"><span class="material-symbols-outlined" style="font-size:16px">upload</span> Upload</button>
+                      </div>
+                      <input type="text" class="form-control" id="url-video-kick_sub" placeholder="Atau tempel link URL video/mp4/gif di sini">
+                      <div class="form-text" id="status-video-kick_sub">Default: Kotak Transparan</div>
+                    </div>
+
+                    <div class="col-12 col-lg-6">
+                      <label class="form-label">Soundboard Audio Alert (.MP3)</label>
+                      <div class="input-group mb-2">
+                        <input type="file" class="form-control" id="file-sound-kick_sub" accept="audio/mp3,audio/mpeg,audio/wav,audio/ogg">
+                        <button class="btn mc-ghost" type="button" id="btn-upload-sound-kick_sub"><span class="material-symbols-outlined" style="font-size:16px">upload</span> Upload</button>
+                      </div>
+                      <input type="text" class="form-control mb-2" id="url-sound-kick_sub" placeholder="Atau tempel link URL mp3 di sini">
+                      <div class="form-text mb-3" id="status-sound-kick_sub">Default: media/alerts/default_alert.mp3</div>
+
+                      <button class="btn btn-sm mc-primary w-100 py-2" id="btn-test-alert-kick_sub" type="button">
+                        <span class="material-symbols-outlined" style="font-size:16px">play_arrow</span>
+                        <span>Uji Alert Kick Subs</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 3. TIKTOK FOLLOWER -->
+            <div class="col-12">
+              <div class="card">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                  <div class="d-flex align-items-center gap-2">
+                    <img class="mc-card-logo" src="logo_platform/tiktok.jpg" alt="TikTok">
+                    <h3 class="card-title mb-0">TikTok Follower Alert</h3>
+                  </div>
+                  <div class="form-check form-switch mb-0">
+                    <input class="form-check-input" type="checkbox" id="switch-alert-tiktok_follow">
+                  </div>
+                </div>
+                <div class="card-body">
+                  <div class="row g-3">
+                    <div class="col-12 col-lg-6">
+                      <label class="form-label" for="input-title-tiktok_follow">Format Teks Ucapan</label>
+                      <input type="text" class="form-control mb-2" id="input-title-tiktok_follow" value="TERIMA KASIH {user} SUDAH FOLLOW">
+                      <div class="form-text mb-3">Variabel tersedia: <code>{user}</code>, <code>{platform}</code></div>
+
+                      <label class="form-label">Video / GIF Alert (Kotak 1:1 Transparan)</label>
+                      <div class="input-group mb-2">
+                        <input type="file" class="form-control" id="file-video-tiktok_follow" accept="video/mp4,video/webm,image/gif,image/webp,image/png,image/jpeg">
+                        <button class="btn mc-ghost" type="button" id="btn-upload-video-tiktok_follow"><span class="material-symbols-outlined" style="font-size:16px">upload</span> Upload</button>
+                      </div>
+                      <input type="text" class="form-control" id="url-video-tiktok_follow" placeholder="Atau tempel link URL video/mp4/gif di sini">
+                      <div class="form-text" id="status-video-tiktok_follow">Default: Kotak Transparan</div>
+                    </div>
+
+                    <div class="col-12 col-lg-6">
+                      <label class="form-label">Soundboard Audio Alert (.MP3)</label>
+                      <div class="input-group mb-2">
+                        <input type="file" class="form-control" id="file-sound-tiktok_follow" accept="audio/mp3,audio/mpeg,audio/wav,audio/ogg">
+                        <button class="btn mc-ghost" type="button" id="btn-upload-sound-tiktok_follow"><span class="material-symbols-outlined" style="font-size:16px">upload</span> Upload</button>
+                      </div>
+                      <input type="text" class="form-control mb-2" id="url-sound-tiktok_follow" placeholder="Atau tempel link URL mp3 di sini">
+                      <div class="form-text mb-3" id="status-sound-tiktok_follow">Default: media/alerts/default_alert.mp3</div>
+
+                      <button class="btn btn-sm mc-primary w-100 py-2" id="btn-test-alert-tiktok_follow" type="button">
+                        <span class="material-symbols-outlined" style="font-size:16px">play_arrow</span>
+                        <span>Uji Alert TikTok Follower</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 4. TIKTOK GIFT -->
+            <div class="col-12">
+              <div class="card">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                  <div class="d-flex align-items-center gap-2">
+                    <img class="mc-card-logo" src="logo_platform/tiktok.jpg" alt="TikTok">
+                    <h3 class="card-title mb-0">TikTok Live Gift Alert</h3>
+                  </div>
+                  <div class="form-check form-switch mb-0">
+                    <input class="form-check-input" type="checkbox" id="switch-alert-tiktok_gift" checked>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <div class="row g-3">
+                    <div class="col-12 col-lg-6">
+                      <label class="form-label" for="input-title-tiktok_gift">Format Teks Ucapan</label>
+                      <input type="text" class="form-control mb-2" id="input-title-tiktok_gift" value="TERIMA KASIH {user} SUDAH GIFT {gift} x{count}">
+                      <div class="form-text mb-3">Variabel tersedia: <code>{user}</code>, <code>{gift}</code>, <code>{count}</code></div>
+
+                      <label class="form-label">Video / GIF Alert (Kotak 1:1 Transparan)</label>
+                      <div class="input-group mb-2">
+                        <input type="file" class="form-control" id="file-video-tiktok_gift" accept="video/mp4,video/webm,image/gif,image/webp,image/png,image/jpeg">
+                        <button class="btn mc-ghost" type="button" id="btn-upload-video-tiktok_gift"><span class="material-symbols-outlined" style="font-size:16px">upload</span> Upload</button>
+                      </div>
+                      <input type="text" class="form-control" id="url-video-tiktok_gift" placeholder="Atau tempel link URL video/mp4/gif di sini">
+                      <div class="form-text" id="status-video-tiktok_gift">Default: Kotak Transparan</div>
+                    </div>
+
+                    <div class="col-12 col-lg-6">
+                      <label class="form-label">Soundboard Audio Alert (.MP3)</label>
+                      <div class="input-group mb-2">
+                        <input type="file" class="form-control" id="file-sound-tiktok_gift" accept="audio/mp3,audio/mpeg,audio/wav,audio/ogg">
+                        <button class="btn mc-ghost" type="button" id="btn-upload-sound-tiktok_gift"><span class="material-symbols-outlined" style="font-size:16px">upload</span> Upload</button>
+                      </div>
+                      <input type="text" class="form-control mb-2" id="url-sound-tiktok_gift" placeholder="Atau tempel link URL mp3 di sini">
+                      <div class="form-text mb-3" id="status-sound-tiktok_gift">Default: media/alerts/default_alert.mp3</div>
+
+                      <button class="btn btn-sm mc-primary w-100 py-2" id="btn-test-alert-tiktok_gift" type="button">
+                        <span class="material-symbols-outlined" style="font-size:16px">play_arrow</span>
+                        <span>Uji Alert TikTok Gift</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 5. TIKTOK TAP TAP (TIAP 100 LIKE) -->
+            <div class="col-12">
+              <div class="card">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                  <div class="d-flex align-items-center gap-2">
+                    <img class="mc-card-logo" src="logo_platform/tiktok.jpg" alt="TikTok">
+                    <h3 class="card-title mb-0">TikTok Tap Tap (Tiap 100 Like) Alert</h3>
+                  </div>
+                  <div class="form-check form-switch mb-0">
+                    <input class="form-check-input" type="checkbox" id="switch-alert-tiktok_like" checked>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <div class="row g-3">
+                    <div class="col-12 col-lg-6">
+                      <label class="form-label" for="input-title-tiktok_like">Format Teks Ucapan</label>
+                      <input type="text" class="form-control mb-2" id="input-title-tiktok_like" value="TERIMA KASIH SEMUANYA! {count} TAP TAP LIKE TERCAPAI">
+                      <div class="form-text mb-3">Alert otomatis terpicu tiap kelipatan 100 like. Variabel: <code>{count}</code>, <code>{user}</code></div>
+
+                      <label class="form-label">Video / GIF Alert (Kotak 1:1 Transparan)</label>
+                      <div class="input-group mb-2">
+                        <input type="file" class="form-control" id="file-video-tiktok_like" accept="video/mp4,video/webm,image/gif,image/webp,image/png,image/jpeg">
+                        <button class="btn mc-ghost" type="button" id="btn-upload-video-tiktok_like"><span class="material-symbols-outlined" style="font-size:16px">upload</span> Upload</button>
+                      </div>
+                      <input type="text" class="form-control" id="url-video-tiktok_like" placeholder="Atau tempel link URL video/mp4/gif di sini">
+                      <div class="form-text" id="status-video-tiktok_like">Default: Kotak Transparan</div>
+                    </div>
+
+                    <div class="col-12 col-lg-6">
+                      <label class="form-label">Soundboard Audio Alert (.MP3)</label>
+                      <div class="input-group mb-2">
+                        <input type="file" class="form-control" id="file-sound-tiktok_like" accept="audio/mp3,audio/mpeg,audio/wav,audio/ogg">
+                        <button class="btn mc-ghost" type="button" id="btn-upload-sound-tiktok_like"><span class="material-symbols-outlined" style="font-size:16px">upload</span> Upload</button>
+                      </div>
+                      <input type="text" class="form-control mb-2" id="url-sound-tiktok_like" placeholder="Atau tempel link URL mp3 di sini">
+                      <div class="form-text mb-3" id="status-sound-tiktok_like">Default: media/alerts/default_alert.mp3</div>
+
+                      <button class="btn btn-sm mc-primary w-100 py-2" id="btn-test-alert-tiktok_like" type="button">
+                        <span class="material-symbols-outlined" style="font-size:16px">play_arrow</span>
+                        <span>Uji Alert TikTok 100 Likes</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       OBS BROWSER SOURCE OVERLAY VIEW (Dipakai di mode OBS atau overlay_chat.html)
+       ========================================================================== -->
+  <div class="obs-overlay-wrapper" id="obs-overlay-view">
+    <ul class="chat-stream-list" id="chat-stream-list-obs">
+      <!-- Direct render container for OBS Browser Source -->
+    </ul>
+  </div>
+
+  <!-- Bootstrap Bundle JS -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"
+          integrity="sha512-7Pi/otdlbbCR+LnW+F7PwFcSDJOuUJB3OxtEHbg4vSMvzvJjde4Po1v4BR9Gdc9aXNUNFVUY+SK51wWT8WF0Gg=="
+          crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+  <!-- JavaScript Modules lokal -->
+  <script src="js/tts.js?v=20260926_3"></script>
+  <script src="js/overlay.js?v=20260926_3"></script>
+  <script src="js/connectors/kick.js?v=20260926_3"></script>
+  <script src="js/connectors/youtube.js?v=20260926_3"></script>
+  <script src="js/connectors/tiktok.js?v=20260930_4"></script>
+  <script src="js/connectors/tikfinity.js?v=20260930_4"></script>
+  <script src="js/viewcount.js?v=20260930_4"></script>
+  <script src="js/app.js?v=20260930_4"></script>
+
+</body>
+</html>
