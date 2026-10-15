@@ -132,6 +132,10 @@ class Application {
     this.tiktok = new TikTokConnector(onChatMessage, onStatusUpdate, onAlert);
     if (typeof TikFinityConnector !== 'undefined') {
       this.tikfinity = new TikFinityConnector(onAlert, onViewCount, onStatusUpdate);
+      const step = this.config.alerts?.tiktok_like?.milestoneStep;
+      if (step && typeof this.tikfinity.setMilestoneStep === 'function') {
+        this.tikfinity.setMilestoneStep(step);
+      }
     }
 
     if (this.isOverlayMode) {
@@ -159,6 +163,9 @@ class Application {
     this.loadState().then(() => {
       this.applyTTSSettings();
       this.applyRendererConfig();
+      if (this.tikfinity && this.config.alerts?.tiktok_like?.milestoneStep) {
+        this.tikfinity.setMilestoneStep(this.config.alerts.tiktok_like.milestoneStep);
+      }
 
       if (!this.isOverlayMode) {
         this.updateUIFromConfig();
@@ -187,6 +194,9 @@ class Application {
         // Apply aesthetic & TTS changes immediately
         this.applyTTSSettings();
         this.applyRendererConfig();
+        if (this.tikfinity && this.config.alerts?.tiktok_like?.milestoneStep) {
+          this.tikfinity.setMilestoneStep(this.config.alerts.tiktok_like.milestoneStep);
+        }
 
         // Reconnect or disconnect if credentials changed
         if (kickChanged) {

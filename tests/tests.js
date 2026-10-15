@@ -364,6 +364,34 @@
     connector.handleMessage(viewCountPacket);
     runner.assertEqual('TikFinity: Viewer count parsed and routed', receivedViewCount, 254);
 
+    // 5.4 Tap-Tap Like Milestone Per Individual User
+    receivedAlert = null;
+    connector.setMilestoneStep(100);
+
+    // User A sends 40 likes -> no milestone yet
+    connector.handleMessage(JSON.stringify({
+      event: 'like',
+      data: { uniqueId: 'user_a', nickname: 'User A', likeCount: 40 }
+    }));
+    runner.assertEqual('TikFinity: Likes below milestone do not trigger alert', receivedAlert, null);
+
+    // User B sends 70 likes -> no milestone yet (separate bucket)
+    connector.handleMessage(JSON.stringify({
+      event: 'like',
+      data: { uniqueId: 'user_b', nickname: 'User B', likeCount: 70 }
+    }));
+    runner.assertEqual('TikFinity: Independent user likes do not combine', receivedAlert, null);
+
+    // User A sends 65 more likes -> total 105 -> triggers milestone 100 for User A
+    connector.handleMessage(JSON.stringify({
+      event: 'like',
+      data: { uniqueId: 'user_a', nickname: 'User A', likeCount: 65 }
+    }));
+    runner.assert('TikFinity: User A milestone 100 triggers alert', !!receivedAlert);
+    runner.assertEqual('TikFinity: Alert user is User A', receivedAlert?.user, 'User A');
+    runner.assertEqual('TikFinity: Alert count is milestone 100', receivedAlert?.count, 100);
+    runner.assertEqual('TikFinity: Alert type is tiktok_like', receivedAlert?.type, 'tiktok_like');
+
     connector.disconnect();
     console.groupEnd();
   }
@@ -421,12 +449,8 @@
     runner.assertEqual('TikTok: Gift alert type is tiktok_gift', receivedAlert?.type, 'tiktok_gift');
     runner.assertEqual('TikTok: Gift name matches', receivedAlert?.gift, 'Paus Menyelam');
 
-    // 6.4 Tap-Tap Like Milestone Accumulator
+    // 6.4 IndoFinity skips room like events (routed to TikFinity)
     receivedAlert = null;
-    connector.accumulatedLikes = 90;
-    connector.lastLikeMilestone = 0;
-    connector.lastLikeAlertTime = 0;
-
     const likePacket = JSON.stringify({
       event: 'like',
       data: {
@@ -435,8 +459,7 @@
       }
     });
     connector.parseIndoFinityPayload(likePacket);
-    runner.assert('TikTok: Tap-tap like milestone (100) triggered alert', !!receivedAlert);
-    runner.assertEqual('TikTok: Milestone count is 100', receivedAlert?.count, 100);
+    runner.assertEqual('TikTok: IndoFinity skips room total like packet', receivedAlert, null);
 
     connector.disconnect();
     console.groupEnd();

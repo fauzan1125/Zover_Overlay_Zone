@@ -195,39 +195,8 @@ class TikTokConnector {
       return;
     }
 
-    // 2. EVENT: TIKTOK TAP TAP / LIKE (Tiap 100 Like)
+    // 2. EVENT: LIKE / TAP-TAP (Dialihkan ke TikFinity agar dihitung per-user, bukan agregat room)
     if (eventName.includes('like') || eventData.likeCount !== undefined || eventData.totalLikes !== undefined || eventData.totalLikeCount !== undefined) {
-      const rawTotal = eventData.totalLikeCount ?? eventData.totalLikes ?? eventData.total_like_count ?? eventData.total_likes;
-      if (typeof rawTotal === 'number' && !isNaN(rawTotal)) {
-        this.accumulatedLikes = Math.max(this.accumulatedLikes || 0, rawTotal);
-      } else if (typeof rawTotal === 'string' && /^\d+$/.test(rawTotal)) {
-        this.accumulatedLikes = Math.max(this.accumulatedLikes || 0, parseInt(rawTotal, 10));
-      } else {
-        const parsedLikes = parseInt(eventData.likeCount, 10);
-        const addedLikes = !isNaN(parsedLikes) && parsedLikes > 0 ? parsedLikes : 1;
-        this.accumulatedLikes = (this.accumulatedLikes || 0) + addedLikes;
-      }
-
-      const milestoneStep = 100;
-      const currentMilestone = Math.floor(this.accumulatedLikes / milestoneStep) * milestoneStep;
-      const now = Date.now();
-
-      if (currentMilestone > this.lastLikeMilestone && currentMilestone >= milestoneStep) {
-        this.lastLikeMilestone = currentMilestone;
-
-        if (now - this.lastLikeAlertTime >= 6000) {
-          this.lastLikeAlertTime = now;
-          if (this.onAlert) {
-            this.onAlert({
-              type: 'tiktok_like',
-              platform: 'tiktok',
-              user: nickname,
-              count: currentMilestone,
-              avatar
-            });
-          }
-        }
-      }
       return;
     }
 

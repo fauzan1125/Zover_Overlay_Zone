@@ -17,6 +17,15 @@ class TikFinityConnector {
     this.shouldAutoReconnect = true;
     this.isConnected = false;
     this.recentFollowers = new Map();
+    this.userLikes = new Map();
+    this.milestoneStep = 100;
+  }
+
+  setMilestoneStep(step) {
+    const val = parseInt(step, 10);
+    if (!isNaN(val) && val > 0) {
+      this.milestoneStep = val;
+    }
   }
 
   connect() {
@@ -162,6 +171,60 @@ class TikFinityConnector {
       const count = parseInt(rawCount, 10);
       if (!isNaN(count) && count >= 0 && this.onViewCount) {
         this.onViewCount(count);
+      }
+    }
+
+    // 3. Tap-tap like event (accumulated per user to avoid room-level aggregate spam)
+    const isLike = eventName === 'like' ||
+      eventName === 'tiktok_like' ||
+      eventName === 'likes' ||
+      (eventName.includes('like') && !eventName.includes('unlike'));
+
+    if (isLike) {
+      const username = data.nickname || data.uniqueId || data.username || 'Penonton';
+      const userKey = String(data.uniqueId || username).trim().toLowerCase();
+      const avatar = data.profilePictureUrl || data.avatarUrl || data.avatar || '';
+      const addedLikes = parseInt(data.likeCount, 10) || 1;
+
+      let userRecord = this.userLikes.get(userKey);
+      if (!userRecord) {
+        userRecord = { count: 0, lastMilestone: 0, lastAlertTime: 0, lastSeen: Date.now() };
+        this.userLikes.set(userKey, userRecord);
+      }
+
+      userRecord.count += addedLikes;
+      userRecord.lastSeen = Date.now();
+
+      const step = this.milestoneStep || 100;
+      const currentMilestone = Math.floor(userRecord.count / step) * step;
+      const now = Date.now();
+
+      if (currentMilestone > userRecord.lastMilestone && currentMilestone >= step) {
+        userRecord.lastMilestone = currentMilestone;
+
+        // Debounce per-user to prevent queue floods during rapid bursts
+        if (now - userRecord.lastAlertTime >= 5000) {
+          userRecord.lastAlertTime = now;
+          if (this.onAlert) {
+            this.onAlert({
+              type: 'tiktok_like',
+              platform: 'tiktok',
+              user: username,
+              count: currentMilestone,
+              avatar
+            });
+          }
+        }
+      }
+
+      // Bound cache size for long streams
+      if (this.userLikes.size > 1000) {
+        const staleLimit = now - (30 * 60 * 1000);
+        for (const [key, record] of this.userLikes.entries()) {
+          if (record.lastSeen < staleLimit) {
+            this.userLikes.delete(key);
+          }
+        }
       }
     }
   }
