@@ -1,0 +1,149 @@
+# PRD & ERD: Fitur "Running Text" (Dynamic Branding Carousel) - ZoVer
+
+## 1. Tujuan & Ringkasan Fitur (Overview)
+Membangun fitur overlay baru bernama **Running Text** untuk sistem **ZoVer**. 
+Catatan Penting: Meskipun bernama "Running Text", perilaku visualnya **BUKAN** teks berjalan horizontal (marquee), melainkan **Vertical Flip Slide Carousel** (pergantian slide berurutan di tengah layar dengan animasi gepeng vertikal / 3D X-Axis Flip `rotateX(90deg) scaleY(0.1)`), persis seperti referensi video branding stream.
+
+Fitur ini terdiri dari:
+1. **Dashboard Admin (CRUD Slide & Pengaturan Global):** Mengelola daftar slide (teks baris 1, teks baris 2, opsional logo di atas teks, durasi tampil, urutan slide).
+2. **OBS Overlay View (`/overlay/running-text`):** Halaman transparan khusus OBS Browser Source yang merender rotasi slide secara real-time, bebas memory leak, dan hemat CPU/GPU.
+
+---
+
+## 2. Entity Relationship Diagram (ERD) & Skema Database
+
+Fitur ini menggunakan 2 entitas utama (atau dapat disimpan dalam tabel SQLite/MySQL maupun JSON Store sesuai arsitektur penyimpanan ZoVer saat ini):
+
+```mermaid
+erDiagram
+    RUNNING_TEXT_SETTINGS ||--o{ RUNNING_TEXT_SLIDES : "memiliki"
+
+    RUNNING_TEXT_SETTINGS {
+        int id PK
+        boolean is_enabled "Status aktif widget secara global"
+        string font_family "Default: Poppins"
+        int font_size_px "Default: 32"
+        string text_color "Default: #FFFFFF"
+        int transition_ms "Default: 350 (kecepatan animasi flip)"
+        datetime updated_at
+    }
+
+    RUNNING_TEXT_SLIDES {
+        int id PK
+        int setting_id FK
+        int sort_order "Urutan tampil slide (1, 2, 3...)"
+        boolean show_logo "True jika menampilkan gambar/logo di atas teks"
+        string logo_url "Path lokal / URL gambar logo (nullable)"
+        string text_line_1 "Baris teks pertama (Wajib)"
+        string text_line_2 "Baris teks kedua (Opsional/Nullable)"
+        int duration_ms "Durasi tampil slide dalam milidetik (Default: 3000)"
+        boolean is_active "Status aktif per slide"
+        datetime created_at
+        datetime updated_at
+    }
+Contoh Payload Data JSON (API / WebSocket / SSE Response):
+JSON
+{
+  "settings": {
+    "is_enabled": true,
+    "font_family": "Poppins",
+    "font_size_px": 32,
+    "text_color": "#FFFFFF",
+    "transition_ms": 350
+  },
+  "slides": [
+    {
+      "id": 1,
+      "sort_order": 1,
+      "show_logo": true,
+      "logo_url": "/uploads/branding/logo.png",
+      "text_line_1": "Cari web top up game , suntik medsos",
+      "text_line_2": "paket data, software premium ?",
+      "duration_ms": 3000,
+      "is_active": true
+    },
+    {
+      "id": 2,
+      "sort_order": 2,
+      "show_logo": true,
+      "logo_url": "/uploads/branding/logo.png",
+      "text_line_1": "Ke wiboostore aja link:",
+      "text_line_2": "[https://www.wiboostore.com/](https://www.wiboostore.com/)",
+      "duration_ms": 3000,
+      "is_active": true
+    },
+    {
+      "id": 3,
+      "sort_order": 3,
+      "show_logo": false,
+      "logo_url": null,
+      "text_line_1": "Subathon",
+      "text_line_2": "1k=1menit",
+      "duration_ms": 3500,
+      "is_active": true
+    },
+    {
+      "id": 4,
+      "sort_order": 4,
+      "show_logo": false,
+      "logo_url": null,
+      "text_line_1": "Lets go",
+      "text_line_2": null,
+      "duration_ms": 3000,
+      "is_active": true
+    }
+  ]
+}
+3. Spesifikasi Fungsional (Functional Requirements)
+A. Modul Dashboard (Control Panel ZoVer)
+Manajemen Slide Dinamis:
+
+User dapat menambah slide baru (+ Tambah Slide), mengubah isi, mengaktifkan/menonaktifkan slide tertentu, mengubah urutan (sort_order), dan menghapus slide.
+
+Setiap slide memiliki toggle Tampilkan Logo (show_logo). Jika aktif, user bisa memilih/upload gambar logo atau memakai URL gambar yang sudah ada.
+
+Input teks dibagi menjadi Baris 1 (wajib) dan Baris 2 (opsional) agar pemenggalan kalimat rapi seperti referensi video.
+
+Input Durasi Tampil (ms/detik) per slide (default 3000 ms).
+
+Real-Time Sync ke Overlay:
+
+Saat user menekan tombol Simpan / Terapkan, backend menyimpan perubahan dan langsung memancarkan event (running_text_updated) melalui WebSocket / Server-Sent Events (SSE) / BroadcastChannel ke halaman overlay OBS tanpa perlu refresh manual di OBS.
+
+B. Modul OBS Overlay (/overlay/running-text)
+Layout & Tipografi:
+
+Background halaman wajib transparent (rgba(0,0,0,0)).
+
+Posisi konten berada di tengah (center horizontal & vertical), dengan susunan vertikal (flex-direction: column): Logo di bagian atas, diikuti Teks Baris 1 dan Teks Baris 2 di bawahnya.
+
+Font menggunakan Poppins (Bold Italic - 700i/800i) warna putih (#FFFFFF) dengan text-shadow: 0px 3px 6px rgba(0, 0, 0, 0.45) agar kontras di atas layar game.
+
+Logika Transisi & Animasi (Wajib Sesuai Referensi):
+
+Menggunakan CSS 3D Transform pada sumbu X:
+
+State Keluar (.flip-out): transform: rotateX(90deg) scaleY(0.1); opacity: 0;
+
+State Masuk (.flip-in): transform: rotateX(0deg) scaleY(1); opacity: 1;
+
+Smart Logo Transition:
+
+Jika slide saat ini dan slide berikutnya sama-sama menampilkan logo yang sama (contoh: Slide 1 ke Slide 2), maka elemen Logo TIDAK ikut melakukan flip (tetap diam/stay di atas), hanya teks di bawahnya saja yang melakukan animasi flip-out dan flip-in.
+
+Jika slide berikutnya tidak memakai logo (show_logo: false seperti pada Slide 3) atau mengganti gambar logo, maka elemen Logo ikut melakukan animasi .flip-out lalu disembunyikan (display: none).
+
+4. Non-Functional Requirements & Guardrails (Standar Audit Qoder)
+Keamanan XSS (Cross-Site Scripting):
+
+Dilarang keras menggunakan innerHTML saat merender text_line_1 dan text_line_2 di sisi overlay. Wajib menggunakan element.textContent.
+
+Validasi ekstensi dan sanitasi URL pada atribut src untuk logo_url.
+
+Zero Memory Leak & Optimasi CPU Rendah:
+
+Dilarang membuat ulang elemen DOM pada setiap pergantian slide. Gunakan kembali (reuse) 1 struktur DOM statis (#logoWrapper, #line1, #line2).
+
+Pastikan semua setTimeout (slideTimer dan transitionTimer) selalu dibersihkan dengan clearTimeout() sebelum membuat timer baru atau saat menerima update data baru dari WebSocket/SSE.
+
+Hanya gunakan properti komposit GPU (transform dan opacity) untuk animasi agar beban CPU di OBS mendekati 0%.

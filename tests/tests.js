@@ -635,7 +635,95 @@
     runner.assert('App: broadcastAlert generates unique ID', !!sentPayload?.id);
     runner.assertEqual('App: broadcastAlert preserves payload data', sentPayload?.data?.user, 'Sultan99');
 
+    // 9.3 Running Text Broadcast Payload Structure
+    let sentRtPayload = null;
+    app.runningTextBroadcastChannel = {
+      postMessage: (p) => { sentRtPayload = p; }
+    };
+    app.broadcastRunningTextConfig();
+    runner.assert('App: broadcastRunningTextConfig includes RUNNING_TEXT_CONFIG envelope', sentRtPayload?.type === 'RUNNING_TEXT_CONFIG');
+    runner.assert('App: broadcastRunningTextConfig includes settings', !!sentRtPayload?.data?.settings);
+    runner.assert('App: broadcastRunningTextConfig includes slides array', Array.isArray(sentRtPayload?.data?.slides));
+
     logBox.remove();
+    console.groupEnd();
+  }
+
+  // =========================================================================
+  // SUITE 10: Running Text (Dynamic Branding Carousel - RunningTextEngine)
+  // =========================================================================
+  function runRunningTextTests() {
+    console.group('--- 10. RunningTextEngine Tests ---');
+
+    const fixture = document.createElement('div');
+    fixture.innerHTML = `
+      <div class="rt-viewport">
+        <div class="rt-stage">
+          <div class="rt-logo-wrapper" style="display:none;">
+            <img class="rt-logo-img" alt="Logo">
+          </div>
+          <div class="rt-text-wrapper">
+            <div class="rt-line1"></div>
+            <div class="rt-line2"></div>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(fixture);
+
+    const engine = new RunningTextEngine(fixture, { disableSync: true });
+
+    // 10.1 Active slide sorting & filtering
+    engine.updateConfig({
+      settings: { is_enabled: true },
+      slides: [
+        { id: 's3', sort_order: 3, is_active: true, text_line_1: 'Slide 3' },
+        { id: 's1', sort_order: 1, is_active: true, text_line_1: 'Slide 1' },
+        { id: 's2', sort_order: 2, is_active: false, text_line_1: 'Slide 2 Inactive' }
+      ]
+    });
+
+    runner.assertEqual('RunningText: Filters out inactive slides', engine.activeSlides.length, 2);
+    runner.assertEqual('RunningText: Sorts active slides by sort_order ascending', engine.activeSlides[0].id, 's1');
+    runner.assertEqual('RunningText: Second slide in sorted order is s3', engine.activeSlides[1].id, 's3');
+
+    // 10.2 Anti-XSS Verification
+    const xssPayload = '<img src=x onerror="alert(1)"><b>Malicious</b>';
+    engine.applySlideContent({ text_line_1: xssPayload, text_line_2: xssPayload, show_logo: false }, false);
+
+    runner.assertEqual('RunningText: Anti-XSS text_line_1 uses textContent (safe raw string)', engine.dom.line1.textContent, xssPayload);
+    runner.assert('RunningText: Anti-XSS ensures no img element created in DOM', engine.dom.line1.querySelector('img') === null);
+    runner.assertEqual('RunningText: Anti-XSS text_line_2 uses textContent', engine.dom.line2.textContent, xssPayload);
+
+    // 10.3 URL Sanitization
+    runner.assertEqual('RunningText: Sanitize javascript: URL', engine.sanitizeLogoUrl('javascript:alert(1)'), '');
+    runner.assertEqual('RunningText: Sanitize data:text/html URL', engine.sanitizeLogoUrl('data:text/html,<script>alert(1)</script>'), '');
+    runner.assertEqual('RunningText: Preserve safe media URL', engine.sanitizeLogoUrl('media/alerts/logo.png'), 'media/alerts/logo.png');
+
+    // 10.4 Smart Logo Transition logic
+    // Same logo transition: Logo stays visible and does not get flip-out class
+    const slideA = { id: 'a', show_logo: true, logo_url: 'media/alerts/logo.png', text_line_1: 'Text A', duration_ms: 10000 };
+    const slideB = { id: 'b', show_logo: true, logo_url: 'media/alerts/logo.png', text_line_1: 'Text B', duration_ms: 10000 };
+    const slideC = { id: 'c', show_logo: false, logo_url: '', text_line_1: 'Text C', duration_ms: 10000 };
+
+    engine.currentSlide = slideA;
+    engine.dom.logoWrapper.classList.add('flip-in');
+    engine.dom.logoWrapper.classList.remove('flip-out');
+
+    engine.showSlide(slideB);
+    runner.assert('RunningText Smart Logo: Same logo keeps logoWrapper in flip-in state (no flip-out)', !engine.dom.logoWrapper.classList.contains('flip-out'));
+
+    // Different logo / logo off: Logo receives flip-out
+    engine.showSlide(slideC);
+    runner.assert('RunningText Smart Logo: Disabled logo triggers flip-out on logoWrapper', engine.dom.logoWrapper.classList.contains('flip-out'));
+
+    // 10.5 Timer teardown
+    engine.scheduleNextSlide(5000);
+    runner.assert('RunningText: slideTimer is active before destroy', engine.slideTimer !== null);
+    engine.destroy();
+    runner.assert('RunningText: destroy cleans up all active timers', engine.slideTimer === null && engine.transitionTimer === null);
+
+    fixture.remove();
     console.groupEnd();
   }
 
@@ -658,6 +746,7 @@
     runYouTubeTests();
     runAlertOverlayTests();
     runApplicationTests();
+    runRunningTextTests();
 
     console.log(
       `%c=======================================================\n🏁 Test Finished: ${runner.passed} Passed, ${runner.failed} Failed out of ${runner.total} Tests\n=======================================================`,

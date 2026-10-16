@@ -70,5 +70,56 @@
       "soundUrl": "media/alerts/default_alert.mp3",
       "milestoneStep": 100
     }
+  },
+  "runningText": {
+    "settings": {
+      "is_enabled": true,
+      "font_family": "Poppins",
+      "font_size_px": 32,
+      "text_color": "#FFFFFF",
+      "transition_ms": 350
+    },
+    "slides": [
+      {
+        "id": "slide_1",
+        "sort_order": 1,
+        "show_logo": true,
+        "logo_url": "media/alerts/default_logo.png",
+        "text_line_1": "Cari web top up game , suntik medsos",
+        "text_line_2": "paket data, software premium ?",
+        "duration_ms": 3000,
+        "is_active": true
+      },
+      {
+        "id": "slide_2",
+        "sort_order": 2,
+        "show_logo": true,
+        "logo_url": "media/alerts/default_logo.png",
+        "text_line_1": "Ke wiboostore aja link:",
+        "text_line_2": "https://www.wiboostore.com/",
+        "duration_ms": 3000,
+        "is_active": true
+      },
+      {
+        "id": "slide_3",
+        "sort_order": 3,
+        "show_logo": false,
+        "logo_url": "",
+        "text_line_1": "Subathon",
+        "text_line_2": "1k=1menit",
+        "duration_ms": 3500,
+        "is_active": true
+      },
+      {
+        "id": "slide_4",
+        "sort_order": 4,
+        "show_logo": false,
+        "logo_url": "",
+        "text_line_1": "Lets go",
+        "text_line_2": "",
+        "duration_ms": 3000,
+        "is_active": true
+      }
+    ]
   }
 }

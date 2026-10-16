@@ -881,6 +881,63 @@ body {
   border: 1px solid rgba(245, 158, 11, 0.3);
 }
 
+/* Running Text Dashboard Components */
+.rt-preview-box {
+  position: relative;
+  width: 100%;
+  height: 240px;
+  background: var(--ot-surface-lowest);
+  border: 1px solid var(--ot-border);
+  border-radius: var(--ot-radius-lg);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rt-slide-card {
+  background: var(--ot-surface-low);
+  border: 1px solid var(--ot-border);
+  border-radius: var(--ot-radius-lg);
+  padding: 1rem;
+  margin-bottom: 0.875rem;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.rt-slide-card:hover {
+  border-color: var(--ot-border-glow);
+}
+
+.rt-slide-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--ot-border);
+}
+
+.rt-slide-order-badge {
+  font-family: var(--ot-font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--ot-primary-light);
+  background: rgba(59, 130, 246, 0.12);
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--ot-radius-sm);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+}
+
+.rt-logo-thumb {
+  max-height: 48px;
+  max-width: 90px;
+  object-fit: contain;
+  background: var(--ot-surface-lowest);
+  padding: 4px;
+  border-radius: var(--ot-radius-sm);
+  border: 1px solid var(--ot-border);
+}
+
 /* --------------------------------------------------------------------------
    9. Mobile Responsiveness & Drawer
    -------------------------------------------------------------------------- */

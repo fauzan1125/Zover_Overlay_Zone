@@ -22,6 +22,7 @@
   <!-- Local Stylesheets -->
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="css/dashboard.css">
+  <link rel="stylesheet" href="css/running_text.css">
 </head>
 <body>
 
@@ -75,6 +76,10 @@
         <button class="tab-btn" data-tab="alerts" type="button">
           <span class="material-symbols-outlined">notifications_active</span>
           <span>Alert</span>
+        </button>
+        <button class="tab-btn" data-tab="runningtext" type="button">
+          <span class="material-symbols-outlined">branding_watermark</span>
+          <span>Running Text</span>
         </button>
       </nav>
 
@@ -155,6 +160,7 @@
               <li><button class="dropdown-item py-2" id="btn-open-obs-window"><span class="material-symbols-outlined me-2 text-info" style="font-size:18px">chat</span>Buka Window Chat</button></li>
               <li><button class="dropdown-item py-2" id="btn-open-obs-vc-window"><span class="material-symbols-outlined me-2 text-info" style="font-size:18px">visibility</span>Buka Window Viewcount</button></li>
               <li><button class="dropdown-item py-2" id="btn-open-obs-alert-window"><span class="material-symbols-outlined me-2 text-warning" style="font-size:18px">notifications_active</span>Buka Window Alert</button></li>
+              <li><button class="dropdown-item py-2" id="btn-open-obs-rt-window"><span class="material-symbols-outlined me-2 text-primary" style="font-size:18px">branding_watermark</span>Buka Window Running Text</button></li>
             </ul>
           </div>
 
@@ -167,6 +173,7 @@
               <li><button class="dropdown-item py-2" id="btn-copy-obs-url"><span class="material-symbols-outlined me-2 text-info" style="font-size:18px">chat</span>Salin Path Overlay Chat</button></li>
               <li><button class="dropdown-item py-2" id="btn-copy-obs-vc-url"><span class="material-symbols-outlined me-2 text-info" style="font-size:18px">visibility</span>Salin Path Overlay Viewcount</button></li>
               <li><button class="dropdown-item py-2" id="btn-copy-obs-alert-url"><span class="material-symbols-outlined me-2 text-warning" style="font-size:18px">notifications_active</span>Salin Path Overlay Alert</button></li>
+              <li><button class="dropdown-item py-2" id="btn-copy-obs-rt-url"><span class="material-symbols-outlined me-2 text-primary" style="font-size:18px">branding_watermark</span>Salin Path Overlay Running Text</button></li>
             </ul>
           </div>
         </div>
@@ -900,6 +907,133 @@
           </div>
         </div>
 
+        <!-- ==================================================================
+             TAB 7: RUNNING TEXT (SET UP > Running Text)
+             ================================================================== -->
+        <div class="tab-content" id="tab-runningtext">
+          <div class="tab-header-banner">
+            <div>
+              <div class="d-flex align-items-center gap-2">
+                <h2 class="banner-title">Branding Carousel (Running Text)</h2>
+                <span class="badge-telemetry badge-telemetry-blue" id="badge-rt-status">
+                  <span class="status-dot active"></span>FLIP CAROUSEL READY
+                </span>
+              </div>
+              <p class="banner-desc">Rotasi teks promosi, sponsor, dan subathon di tengah layar OBS dengan animasi 3D vertical flip.</p>
+            </div>
+            <div class="d-flex align-items-center gap-2 mt-2 mt-md-0">
+              <button class="btn btn-sm mc-primary" id="btn-copy-rt-url" type="button">
+                <span class="material-symbols-outlined" style="font-size:16px">content_copy</span>
+                <span>Salin Path Overlay</span>
+              </button>
+              <button class="btn btn-sm mc-ghost" id="btn-open-rt-window" type="button">
+                <span class="material-symbols-outlined" style="font-size:16px">open_in_new</span>
+                <span>Buka Tab Overlay</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="row g-3">
+            <!-- Left: Global Settings & Live Preview -->
+            <div class="col-12 col-xl-5">
+              <div class="card h-100">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="material-symbols-outlined text-info" style="font-size:20px">tune</span>
+                    <h3 class="card-title mb-0">Pengaturan Global & Pratinjau</h3>
+                  </div>
+                  <div class="form-check form-switch mb-0">
+                    <input class="form-check-input" type="checkbox" id="switch-rt-enable" checked>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                      <label class="form-label mb-0" for="range-rt-transition">Kecepatan Animasi Flip</label>
+                      <span class="badge-telemetry badge-telemetry-blue" id="val-rt-transition">350ms</span>
+                    </div>
+                    <input type="range" class="form-range" id="range-rt-transition" min="150" max="1000" step="50" value="350">
+                    <div class="d-flex justify-content-between text-muted" style="font-size:11px;">
+                      <span>150ms (Cepat)</span>
+                      <span>Default: 350ms</span>
+                      <span>1000ms (Lambat)</span>
+                    </div>
+                  </div>
+
+                  <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                      <label class="form-label mb-0" for="range-rt-fontsize">Ukuran Teks Font</label>
+                      <span class="badge-telemetry badge-telemetry-blue" id="val-rt-fontsize">32px</span>
+                    </div>
+                    <input type="range" class="form-range" id="range-rt-fontsize" min="18" max="64" step="2" value="32">
+                    <div class="d-flex justify-content-between text-muted" style="font-size:11px;">
+                      <span>18px</span>
+                      <span>Default: 32px</span>
+                      <span>64px</span>
+                    </div>
+                  </div>
+
+                  <div class="mb-4">
+                    <label class="form-label" for="color-rt-text">Warna Teks</label>
+                    <div class="input-group">
+                      <input type="color" class="form-control form-control-color" id="color-rt-text" value="#ffffff" title="Pilih warna teks">
+                      <input type="text" class="form-control" id="input-rt-textcolor" value="#FFFFFF" placeholder="#FFFFFF">
+                    </div>
+                  </div>
+
+                  <div class="mb-2">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                      <span class="form-label mb-0">Pratinjau Live Carousel</span>
+                      <span class="badge-telemetry badge-telemetry-green" id="rt-preview-badge">AKTIF</span>
+                    </div>
+                    <div class="rt-preview-box" id="rt-dashboard-preview">
+                      <div class="rt-viewport" style="transform: scale(0.75);">
+                        <div class="rt-stage">
+                          <div class="rt-logo-wrapper" style="display:none;">
+                            <img class="rt-logo-img" alt="Logo Preview">
+                          </div>
+                          <div class="rt-text-wrapper">
+                            <div class="rt-line rt-line1"></div>
+                            <div class="rt-line rt-line2"></div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: Dynamic Slides Management -->
+            <div class="col-12 col-xl-7">
+              <div class="card h-100">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="material-symbols-outlined text-info" style="font-size:20px">format_list_bulleted</span>
+                    <h3 class="card-title mb-0">Daftar Slide Carousel</h3>
+                  </div>
+                  <button class="btn btn-sm mc-primary" id="btn-add-rt-slide" type="button">
+                    <span class="material-symbols-outlined" style="font-size:16px">add</span>
+                    <span>Tambah Slide</span>
+                  </button>
+                </div>
+                <div class="card-body">
+                  <div id="rt-slides-list">
+                    <!-- Slide cards dynamically injected by app.js -->
+                  </div>
+
+                  <div class="d-flex justify-content-end gap-2 pt-2 border-top border-secondary">
+                    <button class="btn btn-sm mc-primary px-3 py-2" id="btn-save-rt-config" type="button">
+                      <span class="material-symbols-outlined" style="font-size:16px">save</span>
+                      <span>Simpan & Terapkan Running Text</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </main>
     </div>
   </div>
@@ -926,7 +1060,8 @@
   <script src="js/connectors/tiktok.js?v=20260930_4"></script>
   <script src="js/connectors/tikfinity.js?v=20260930_4"></script>
   <script src="js/viewcount.js?v=20260930_4"></script>
-  <script src="js/app.js?v=20260930_4"></script>
+  <script src="js/running_text.js?v=20261016_1"></script>
+  <script src="js/app.js?v=20261016_1"></script>
 
 </body>
 </html>

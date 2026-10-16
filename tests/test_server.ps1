@@ -148,6 +148,10 @@ Assert-Test "Config contains YouTube fields" ($exampleJson.PSObject.Properties['
 Assert-Test "Config contains TikTok fields" ($exampleJson.PSObject.Properties['tiktokUsername'] -ne $null)
 Assert-Test "Config contains TTS settings" ($exampleJson.PSObject.Properties['ttsEnabled'] -ne $null)
 Assert-Test "Config contains Alert definitions" ($exampleJson.alerts.PSObject.Properties['yt_sub'] -ne $null)
+Assert-Test "Config contains RunningText definitions" ($exampleJson.PSObject.Properties['runningText'] -ne $null)
+Assert-Test "overlay_running_text.html exists" (Test-Path (Join-Path $rootDir "overlay_running_text.html"))
+Assert-Test "running_text.css exists" (Test-Path (Join-Path $rootDir "css\running_text.css"))
+Assert-Test "running_text.js exists" (Test-Path (Join-Path $rootDir "js\running_text.js"))
 
 # Test UTF-8 with international / Indonesian characters
 $testUtf8Obj = @{

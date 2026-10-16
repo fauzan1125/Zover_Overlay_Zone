@@ -105,6 +105,57 @@ class Application {
           soundUrl: 'media/alerts/default_alert.mp3',
           milestoneStep: 100
         }
+      },
+      runningText: {
+        settings: {
+          is_enabled: true,
+          font_family: 'Poppins',
+          font_size_px: 32,
+          text_color: '#FFFFFF',
+          transition_ms: 350
+        },
+        slides: [
+          {
+            id: 'slide_1',
+            sort_order: 1,
+            show_logo: true,
+            logo_url: 'media/alerts/default_logo.png',
+            text_line_1: 'Cari web top up game , suntik medsos',
+            text_line_2: 'paket data, software premium ?',
+            duration_ms: 3000,
+            is_active: true
+          },
+          {
+            id: 'slide_2',
+            sort_order: 2,
+            show_logo: true,
+            logo_url: 'media/alerts/default_logo.png',
+            text_line_1: 'Ke wiboostore aja link:',
+            text_line_2: 'https://www.wiboostore.com/',
+            duration_ms: 3000,
+            is_active: true
+          },
+          {
+            id: 'slide_3',
+            sort_order: 3,
+            show_logo: false,
+            logo_url: '',
+            text_line_1: 'Subathon',
+            text_line_2: '1k=1menit',
+            duration_ms: 3500,
+            is_active: true
+          },
+          {
+            id: 'slide_4',
+            sort_order: 4,
+            show_logo: false,
+            logo_url: '',
+            text_line_1: 'Lets go',
+            text_line_2: '',
+            duration_ms: 3000,
+            is_active: true
+          }
+        ]
       }
     };
 
@@ -113,6 +164,12 @@ class Application {
       this.alertBroadcastChannel = new BroadcastChannel('zover_alert_channel');
     } catch (e) {}
     this.alertTriggerKey = 'chat_overlay_alert_trigger';
+
+    // Running Text Broadcast Channel & Storage Key
+    try {
+      this.runningTextBroadcastChannel = new BroadcastChannel('zover_running_text_channel');
+    } catch (e) {}
+    this.runningTextTriggerKey = 'chat_overlay_running_text_trigger';
 
     // Initialize Services
     this.tts = new MbakGoogleTTS();
@@ -154,6 +211,11 @@ class Application {
       this.viewcount = new ViewCountMonitor();
     }
 
+    // Initialize Dashboard Running Text Preview Engine
+    if (!this.isOverlayMode && document.getElementById('rt-dashboard-preview') && typeof RunningTextEngine !== 'undefined') {
+      this.dashboardRunningTextEngine = new RunningTextEngine(document.getElementById('rt-dashboard-preview'), { disableSync: true });
+    }
+
     this.bindDashboardEvents(); // Bind events after services are ready
     this.applyRendererConfig();
 
@@ -167,8 +229,13 @@ class Application {
         this.tikfinity.setMilestoneStep(this.config.alerts.tiktok_like.milestoneStep);
       }
 
+      if (this.dashboardRunningTextEngine && this.config.runningText) {
+        this.dashboardRunningTextEngine.updateConfig(this.config.runningText);
+      }
+
       if (!this.isOverlayMode) {
         this.updateUIFromConfig();
+        this.renderRunningTextSlideCards();
       } else {
         // If in OBS Overlay mode, poll the backend config every 5 seconds to sync settings live
         setInterval(() => this.pollOverlayConfig(), 5000);
@@ -507,10 +574,34 @@ class Application {
           }
         };
       }
+      if ('BroadcastChannel' in window) {
+        if (!this.runningTextBroadcastChannel) this.runningTextBroadcastChannel = new BroadcastChannel('zover_running_text_channel');
+        this.runningTextBroadcastChannel.onmessage = (event) => {
+          if (event.data && event.data.type === 'RUNNING_TEXT_CONFIG') {
+            this.config.runningText = event.data.data;
+            if (this.dashboardRunningTextEngine) {
+              this.dashboardRunningTextEngine.updateConfig(this.config.runningText);
+            }
+          }
+        };
+      }
     } catch (e) {}
 
     // 2. LocalStorage Storage Event Listener
     window.addEventListener('storage', (e) => {
+      // Sync Running Text Triggers
+      if (e.key === this.runningTextTriggerKey && e.newValue) {
+        try {
+          const payload = JSON.parse(e.newValue);
+          if (payload.type === 'RUNNING_TEXT_CONFIG' && payload.data) {
+            this.config.runningText = payload.data;
+            if (this.dashboardRunningTextEngine) {
+              this.dashboardRunningTextEngine.updateConfig(this.config.runningText);
+            }
+          }
+        } catch (err) {}
+      }
+
       // Sync Alert Triggers
       if (e.key === this.alertTriggerKey && e.newValue) {
         try {
@@ -620,7 +711,8 @@ class Application {
           overlay: 'Chatbox',
           tts: 'Baca Komentar',
           viewcount: 'Viewcount',
-          alerts: 'Alert'
+          alerts: 'Alert',
+          runningtext: 'Running Text'
         };
         const pageTitle = tabTitleMap[targetTab] || targetTab;
         const bcSection = document.getElementById('bc-section-name');
@@ -911,6 +1003,8 @@ class Application {
     document.getElementById('btn-copy-obs-url')?.addEventListener('click', () => copyObsPath('btn-copy-obs-url', 'overlay_chat.html'));
     document.getElementById('btn-copy-obs-vc-url')?.addEventListener('click', () => copyObsPath('btn-copy-obs-vc-url', 'overlay_viewcount.html'));
     document.getElementById('btn-copy-obs-alert-url')?.addEventListener('click', () => copyObsPath('btn-copy-obs-alert-url', 'overlay_alert.html'));
+    document.getElementById('btn-copy-obs-rt-url')?.addEventListener('click', () => copyObsPath('btn-copy-obs-rt-url', 'overlay_running_text.html'));
+    document.getElementById('btn-copy-rt-url')?.addEventListener('click', () => copyObsPath('btn-copy-rt-url', 'overlay_running_text.html'));
 
     // Open OBS Overlay Window Button
     const openObsWindow = (file, w, h) => {
@@ -920,6 +1014,68 @@ class Application {
     document.getElementById('btn-open-obs-window')?.addEventListener('click', () => openObsWindow('overlay_chat.html', 550, 750));
     document.getElementById('btn-open-obs-vc-window')?.addEventListener('click', () => openObsWindow('overlay_viewcount.html', 700, 120));
     document.getElementById('btn-open-obs-alert-window')?.addEventListener('click', () => openObsWindow('overlay_alert.html', 1280, 720));
+    document.getElementById('btn-open-obs-rt-window')?.addEventListener('click', () => openObsWindow('overlay_running_text.html', 1280, 720));
+    document.getElementById('btn-open-rt-window')?.addEventListener('click', () => openObsWindow('overlay_running_text.html', 1280, 720));
+
+    // Running Text Global Settings Listeners
+    document.getElementById('switch-rt-enable')?.addEventListener('change', (e) => {
+      if (!this.config.runningText) this.config.runningText = { settings: {}, slides: [] };
+      if (!this.config.runningText.settings) this.config.runningText.settings = {};
+      this.config.runningText.settings.is_enabled = e.target.checked;
+      this.notifyConfigChange();
+    });
+
+    document.getElementById('range-rt-transition')?.addEventListener('input', (e) => {
+      const val = parseInt(e.target.value, 10);
+      const valEl = document.getElementById('val-rt-transition');
+      if (valEl) valEl.innerText = `${val}ms`;
+      if (!this.config.runningText) this.config.runningText = { settings: {}, slides: [] };
+      if (!this.config.runningText.settings) this.config.runningText.settings = {};
+      this.config.runningText.settings.transition_ms = val;
+      this.notifyConfigChange();
+    });
+
+    document.getElementById('range-rt-fontsize')?.addEventListener('input', (e) => {
+      const val = parseInt(e.target.value, 10);
+      const valEl = document.getElementById('val-rt-fontsize');
+      if (valEl) valEl.innerText = `${val}px`;
+      if (!this.config.runningText) this.config.runningText = { settings: {}, slides: [] };
+      if (!this.config.runningText.settings) this.config.runningText.settings = {};
+      this.config.runningText.settings.font_size_px = val;
+      this.notifyConfigChange();
+    });
+
+    const colorPicker = document.getElementById('color-rt-text');
+    const colorHexInput = document.getElementById('input-rt-textcolor');
+    colorPicker?.addEventListener('input', (e) => {
+      if (colorHexInput) colorHexInput.value = e.target.value.toUpperCase();
+      if (!this.config.runningText) this.config.runningText = { settings: {}, slides: [] };
+      if (!this.config.runningText.settings) this.config.runningText.settings = {};
+      this.config.runningText.settings.text_color = e.target.value.toUpperCase();
+      this.notifyConfigChange();
+    });
+    colorHexInput?.addEventListener('change', (e) => {
+      const val = e.target.value.trim();
+      if (colorPicker && /^#[0-9A-Fa-f]{6}$/.test(val)) colorPicker.value = val;
+      if (!this.config.runningText) this.config.runningText = { settings: {}, slides: [] };
+      if (!this.config.runningText.settings) this.config.runningText.settings = {};
+      this.config.runningText.settings.text_color = val;
+      this.notifyConfigChange();
+    });
+
+    document.getElementById('btn-add-rt-slide')?.addEventListener('click', () => {
+      this.addRunningTextSlide();
+    });
+
+    document.getElementById('btn-save-rt-config')?.addEventListener('click', (e) => {
+      const btn = e.currentTarget;
+      this.notifyConfigChange();
+      const oldHtml = btn.innerHTML;
+      btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:16px">check_circle</span> <span>Tersimpan & Aktif!</span>';
+      setTimeout(() => {
+        btn.innerHTML = oldHtml;
+      }, 2000);
+    });
   }
 
   updateUIFromConfig() {
@@ -995,11 +1151,369 @@ class Application {
         }
       });
     }
+
+    // Running Text Global Settings UI Sync
+    if (this.config.runningText) {
+      const rtSettings = this.config.runningText.settings || {};
+      const swRt = document.getElementById('switch-rt-enable');
+      if (swRt) swRt.checked = rtSettings.is_enabled !== false;
+
+      const rangeTrans = document.getElementById('range-rt-transition');
+      const valTrans = document.getElementById('val-rt-transition');
+      if (rangeTrans) rangeTrans.value = rtSettings.transition_ms || 350;
+      if (valTrans) valTrans.innerText = `${rtSettings.transition_ms || 350}ms`;
+
+      const rangeFont = document.getElementById('range-rt-fontsize');
+      const valFont = document.getElementById('val-rt-fontsize');
+      if (rangeFont) rangeFont.value = rtSettings.font_size_px || 32;
+      if (valFont) valFont.innerText = `${rtSettings.font_size_px || 32}px`;
+
+      const colorInput = document.getElementById('color-rt-text');
+      const hexInput = document.getElementById('input-rt-textcolor');
+      if (colorInput) colorInput.value = rtSettings.text_color || '#FFFFFF';
+      if (hexInput) hexInput.value = rtSettings.text_color || '#FFFFFF';
+    }
+
+    this.renderRunningTextSlideCards();
+  }
+
+  renderRunningTextSlideCards() {
+    const listEl = document.getElementById('rt-slides-list');
+    if (!listEl) return;
+
+    listEl.innerHTML = '';
+    const slides = this.config.runningText?.slides || [];
+
+    if (slides.length === 0) {
+      const emptyDiv = document.createElement('div');
+      emptyDiv.className = 'text-center py-4 text-muted';
+      emptyDiv.textContent = 'Belum ada slide. Klik "+ Tambah Slide" untuk membuat slide baru.';
+      listEl.appendChild(emptyDiv);
+      return;
+    }
+
+    slides.forEach((slide, idx) => {
+      const card = document.createElement('div');
+      card.className = 'rt-slide-card';
+      card.dataset.slideId = slide.id;
+
+      const header = document.createElement('div');
+      header.className = 'rt-slide-header';
+
+      const leftHead = document.createElement('div');
+      leftHead.className = 'd-flex align-items-center gap-2';
+
+      const badge = document.createElement('span');
+      badge.className = 'rt-slide-order-badge';
+      badge.textContent = `Slide #${idx + 1}`;
+      leftHead.appendChild(badge);
+
+      const btnUp = document.createElement('button');
+      btnUp.type = 'button';
+      btnUp.className = 'btn btn-icon-only py-1 px-2';
+      btnUp.title = 'Geser ke atas';
+      btnUp.disabled = idx === 0;
+      btnUp.innerHTML = '<span class="material-symbols-outlined" style="font-size:16px">arrow_upward</span>';
+      btnUp.addEventListener('click', () => this.moveRunningTextSlide(slide.id, -1));
+      leftHead.appendChild(btnUp);
+
+      const btnDown = document.createElement('button');
+      btnDown.type = 'button';
+      btnDown.className = 'btn btn-icon-only py-1 px-2';
+      btnDown.title = 'Geser ke bawah';
+      btnDown.disabled = idx === slides.length - 1;
+      btnDown.innerHTML = '<span class="material-symbols-outlined" style="font-size:16px">arrow_downward</span>';
+      btnDown.addEventListener('click', () => this.moveRunningTextSlide(slide.id, 1));
+      leftHead.appendChild(btnDown);
+
+      header.appendChild(leftHead);
+
+      const rightHead = document.createElement('div');
+      rightHead.className = 'd-flex align-items-center gap-3';
+
+      const switchWrap = document.createElement('div');
+      switchWrap.className = 'form-check form-switch mb-0';
+      const switchInput = document.createElement('input');
+      switchInput.type = 'checkbox';
+      switchInput.className = 'form-check-input';
+      switchInput.checked = slide.is_active !== false;
+      switchInput.title = 'Status Aktif Slide';
+      switchInput.addEventListener('change', (e) => {
+        slide.is_active = e.target.checked;
+        this.notifyConfigChange();
+      });
+      switchWrap.appendChild(switchInput);
+      rightHead.appendChild(switchWrap);
+
+      const btnDel = document.createElement('button');
+      btnDel.type = 'button';
+      btnDel.className = 'btn btn-sm btn-outline-danger py-1 px-2';
+      btnDel.title = 'Hapus Slide';
+      btnDel.innerHTML = '<span class="material-symbols-outlined" style="font-size:16px">delete</span>';
+      btnDel.addEventListener('click', () => this.removeRunningTextSlide(slide.id));
+      rightHead.appendChild(btnDel);
+
+      header.appendChild(rightHead);
+      card.appendChild(header);
+
+      const row = document.createElement('div');
+      row.className = 'row g-2';
+
+      const colLine1 = document.createElement('div');
+      colLine1.className = 'col-12 col-md-6';
+      const lblLine1 = document.createElement('label');
+      lblLine1.className = 'form-label mb-1 text-secondary';
+      lblLine1.style.fontSize = '12px';
+      lblLine1.textContent = 'Teks Baris 1 (Wajib)';
+      const inpLine1 = document.createElement('input');
+      inpLine1.type = 'text';
+      inpLine1.className = 'form-control form-control-sm';
+      inpLine1.value = slide.text_line_1 || '';
+      inpLine1.placeholder = 'Contoh: Cari web top up game...';
+      inpLine1.addEventListener('input', (e) => {
+        slide.text_line_1 = e.target.value;
+      });
+      inpLine1.addEventListener('change', () => this.notifyConfigChange());
+      colLine1.appendChild(lblLine1);
+      colLine1.appendChild(inpLine1);
+      row.appendChild(colLine1);
+
+      const colLine2 = document.createElement('div');
+      colLine2.className = 'col-12 col-md-6';
+      const lblLine2 = document.createElement('label');
+      lblLine2.className = 'form-label mb-1 text-secondary';
+      lblLine2.style.fontSize = '12px';
+      lblLine2.textContent = 'Teks Baris 2 (Opsional)';
+      const inpLine2 = document.createElement('input');
+      inpLine2.type = 'text';
+      inpLine2.className = 'form-control form-control-sm';
+      inpLine2.value = slide.text_line_2 || '';
+      inpLine2.placeholder = 'Contoh: paket data, software premium ?';
+      inpLine2.addEventListener('input', (e) => {
+        slide.text_line_2 = e.target.value;
+      });
+      inpLine2.addEventListener('change', () => this.notifyConfigChange());
+      colLine2.appendChild(lblLine2);
+      colLine2.appendChild(inpLine2);
+      row.appendChild(colLine2);
+
+      const colDur = document.createElement('div');
+      colDur.className = 'col-12 col-md-4';
+      const lblDur = document.createElement('label');
+      lblDur.className = 'form-label mb-1 text-secondary';
+      lblDur.style.fontSize = '12px';
+      lblDur.textContent = 'Durasi Tampil (ms)';
+      const inpDur = document.createElement('input');
+      inpDur.type = 'number';
+      inpDur.className = 'form-control form-control-sm';
+      inpDur.value = slide.duration_ms || 3000;
+      inpDur.min = 500;
+      inpDur.step = 500;
+      inpDur.addEventListener('change', (e) => {
+        slide.duration_ms = parseInt(e.target.value, 10) || 3000;
+        this.notifyConfigChange();
+      });
+      colDur.appendChild(lblDur);
+      colDur.appendChild(inpDur);
+      row.appendChild(colDur);
+
+      const colLogo = document.createElement('div');
+      colLogo.className = 'col-12 col-md-8';
+      const logoTop = document.createElement('div');
+      logoTop.className = 'd-flex align-items-center justify-content-between mb-1';
+
+      const chkLogoLabel = document.createElement('label');
+      chkLogoLabel.className = 'form-check-label text-secondary';
+      chkLogoLabel.style.fontSize = '12px';
+      chkLogoLabel.textContent = 'Tampilkan Logo di Atas Teks';
+
+      const chkLogo = document.createElement('input');
+      chkLogo.type = 'checkbox';
+      chkLogo.className = 'form-check-input me-1';
+      chkLogo.checked = Boolean(slide.show_logo);
+
+      const logoCheckWrap = document.createElement('div');
+      logoCheckWrap.className = 'form-check form-switch mb-0';
+      logoCheckWrap.appendChild(chkLogo);
+      logoCheckWrap.appendChild(chkLogoLabel);
+      logoTop.appendChild(logoCheckWrap);
+      colLogo.appendChild(logoTop);
+
+      const logoControls = document.createElement('div');
+      logoControls.className = 'd-flex gap-2 align-items-center';
+      logoControls.style.display = slide.show_logo ? 'flex' : 'none';
+
+      const thumbImg = document.createElement('img');
+      thumbImg.className = 'rt-logo-thumb';
+      thumbImg.src = slide.logo_url || 'media/alerts/default_logo.png';
+      thumbImg.alt = 'Logo Thumb';
+      thumbImg.onerror = () => { thumbImg.style.display = 'none'; };
+      thumbImg.onload = () => { thumbImg.style.display = 'block'; };
+      if (!slide.logo_url) thumbImg.style.display = 'none';
+      logoControls.appendChild(thumbImg);
+
+      const inpLogoUrl = document.createElement('input');
+      inpLogoUrl.type = 'text';
+      inpLogoUrl.className = 'form-control form-control-sm flex-fill';
+      inpLogoUrl.placeholder = 'media/alerts/... atau link URL';
+      inpLogoUrl.value = slide.logo_url || '';
+      inpLogoUrl.addEventListener('change', (e) => {
+        slide.logo_url = e.target.value.trim();
+        thumbImg.src = slide.logo_url;
+        thumbImg.style.display = slide.logo_url ? 'block' : 'none';
+        this.notifyConfigChange();
+      });
+      logoControls.appendChild(inpLogoUrl);
+
+      const fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.accept = 'image/png,image/jpeg,image/gif,image/webp';
+      fileInput.style.display = 'none';
+      fileInput.addEventListener('change', () => {
+        if (fileInput.files && fileInput.files[0]) {
+          this.uploadRunningTextLogo(fileInput.files[0], slide.id, inpLogoUrl, thumbImg);
+        }
+      });
+
+      const btnUpload = document.createElement('button');
+      btnUpload.type = 'button';
+      btnUpload.className = 'btn btn-sm btn-outline-info text-nowrap';
+      btnUpload.innerHTML = '<span class="material-symbols-outlined" style="font-size:14px">upload</span> Upload';
+      btnUpload.addEventListener('click', () => fileInput.click());
+      logoControls.appendChild(fileInput);
+      logoControls.appendChild(btnUpload);
+
+      chkLogo.addEventListener('change', (e) => {
+        slide.show_logo = e.target.checked;
+        logoControls.style.display = slide.show_logo ? 'flex' : 'none';
+        this.notifyConfigChange();
+      });
+
+      colLogo.appendChild(logoControls);
+      row.appendChild(colLogo);
+
+      card.appendChild(row);
+      listEl.appendChild(card);
+    });
+  }
+
+  addRunningTextSlide() {
+    if (!this.config.runningText) {
+      this.config.runningText = { settings: {}, slides: [] };
+    }
+    if (!Array.isArray(this.config.runningText.slides)) {
+      this.config.runningText.slides = [];
+    }
+
+    const newOrder = this.config.runningText.slides.length + 1;
+    const newSlide = {
+      id: `slide_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      sort_order: newOrder,
+      show_logo: false,
+      logo_url: '',
+      text_line_1: 'Teks Promosi Baru',
+      text_line_2: '',
+      duration_ms: 3000,
+      is_active: true
+    };
+
+    this.config.runningText.slides.push(newSlide);
+    this.renderRunningTextSlideCards();
+    this.notifyConfigChange();
+  }
+
+  removeRunningTextSlide(slideId) {
+    if (!this.config.runningText?.slides) return;
+    this.config.runningText.slides = this.config.runningText.slides.filter((s) => s.id !== slideId);
+    this.config.runningText.slides.forEach((s, idx) => {
+      s.sort_order = idx + 1;
+    });
+    this.renderRunningTextSlideCards();
+    this.notifyConfigChange();
+  }
+
+  moveRunningTextSlide(slideId, direction) {
+    if (!this.config.runningText?.slides) return;
+    const slides = this.config.runningText.slides;
+    const index = slides.findIndex((s) => s.id === slideId);
+    if (index === -1) return;
+
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= slides.length) return;
+
+    const temp = slides[index];
+    slides[index] = slides[targetIndex];
+    slides[targetIndex] = temp;
+
+    slides.forEach((s, idx) => {
+      s.sort_order = idx + 1;
+    });
+
+    this.renderRunningTextSlideCards();
+    this.notifyConfigChange();
+  }
+
+  async uploadRunningTextLogo(file, slideId, urlInputEl, thumbImgEl) {
+    if (!file) return;
+    const slide = this.config.runningText?.slides?.find((s) => s.id === slideId);
+    if (!slide) return;
+
+    try {
+      const uploadUrl = `http://localhost:8765/api/upload?filename=${encodeURIComponent(file.name)}`;
+      const res = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': file.type || 'application/octet-stream'
+        },
+        body: file
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const resJson = await res.json();
+      const relativeUrl = resJson.url;
+
+      slide.logo_url = relativeUrl;
+      slide.show_logo = true;
+
+      if (urlInputEl) urlInputEl.value = relativeUrl;
+      if (thumbImgEl) {
+        thumbImgEl.src = relativeUrl;
+        thumbImgEl.style.display = 'block';
+      }
+
+      this.notifyConfigChange();
+    } catch (err) {
+      console.warn('[RunningText Logo Upload Error]', err);
+    }
+  }
+
+  broadcastRunningTextConfig() {
+    if (!this.config.runningText) return;
+    const payload = {
+      type: 'RUNNING_TEXT_CONFIG',
+      data: this.config.runningText,
+      timestamp: Date.now()
+    };
+
+    try {
+      if (this.runningTextBroadcastChannel) {
+        this.runningTextBroadcastChannel.postMessage(payload);
+      }
+    } catch (e) {}
+
+    try {
+      localStorage.setItem(this.runningTextTriggerKey, JSON.stringify(payload));
+    } catch (e) {}
   }
 
   notifyConfigChange() {
     this.applyTTSSettings();
     this.applyRendererConfig();
+
+    if (this.dashboardRunningTextEngine && this.config.runningText) {
+      this.dashboardRunningTextEngine.updateConfig(this.config.runningText);
+    }
+    this.broadcastRunningTextConfig();
 
     try {
       localStorage.setItem(this.storageKey, JSON.stringify(this.config));
