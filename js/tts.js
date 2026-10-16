@@ -105,6 +105,21 @@ class MbakGoogleTTS {
     msg = this.sanitizeForSpeech(msg);
     if (!msg) return;
 
+    // Cross-Scene / Cross-Source Audio Mutex: prevents double TTS when user has multiple scenes active in OBS
+    const rawUser = chatData.username || chatData.user || 'Viewer';
+    const lockKey = `zover_tts_lock_${chatData.id || (platform + '_' + rawUser + '_' + msg)}`;
+    try {
+      const existingLock = localStorage.getItem(lockKey);
+      const now = Date.now();
+      if (existingLock && (now - parseInt(existingLock, 10)) < 4000) {
+        return; // Another OBS scene is already speaking this message
+      }
+      localStorage.setItem(lockKey, String(now));
+      setTimeout(() => {
+        try { localStorage.removeItem(lockKey); } catch (_) {}
+      }, 6000);
+    } catch (_) {}
+
     // Support multiple placeholder occurrences across template
     let text = this.template
       .replace(/{user}/gi, chatData.username || 'Seseorang')

@@ -297,7 +297,7 @@ class AlertOverlayManager {
     this.container.appendChild(stage);
 
     // 3. MAINKAN SOUNDBOARD AUDIO
-    this.playSound(cfg ? cfg.soundUrl : '');
+    this.playSound(cfg ? cfg.soundUrl : '', alertItem);
 
     // 4. TRIGGER ANIMASI SHOW
     requestAnimationFrame(() => {
@@ -321,8 +321,23 @@ class AlertOverlayManager {
     }, durationMs);
   }
 
-  playSound(soundUrl) {
+  playSound(soundUrl, alertItem = {}) {
     if (!this.audioPlayer) return;
+
+    // Cross-Scene / Cross-Source Audio Mutex: prevents double alert SFX if user has multiple scenes active in OBS
+    const alertId = alertItem.id || `${alertItem.type || 'alert'}_${alertItem.user || ''}_${alertItem.gift || ''}_${alertItem.count || ''}`;
+    const lockKey = `zover_alert_lock_${alertId}`;
+    try {
+      const existingLock = localStorage.getItem(lockKey);
+      const now = Date.now();
+      if (existingLock && (now - parseInt(existingLock, 10)) < 3500) {
+        return; // Another OBS scene is already playing this alert SFX
+      }
+      localStorage.setItem(lockKey, String(now));
+      setTimeout(() => {
+        try { localStorage.removeItem(lockKey); } catch (_) {}
+      }, 5000);
+    } catch (_) {}
 
     const url = (soundUrl || 'media/alerts/default_alert.mp3').trim();
     if (!url) return;

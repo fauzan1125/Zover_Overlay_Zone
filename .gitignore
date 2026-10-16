@@ -8,8 +8,16 @@ config.json
 # OS / Editor / IDE
 .DS_Store
 Thumbs.db
+ehthumbs.db
+desktop.ini
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 .vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
 
 # AI guidelines & internal skills (khusus editor lokal)
 .agents/
@@ -31,12 +39,21 @@ update_zover_prd.txt
 # File uji / sampah lokal / cache browser
 test.mp3
 test2.mp3
+test_*.mp3
 brave_out.txt
 test_err.html
 tiktok_proxy.html
 *.tmp
 *.temp
 *.bak
+*~
+
+# File upload media pengguna / kustom (WhatsApp, custom alerts)
+media/alerts/whatsapp*
+media/alerts/*removebg*
+media/alerts/custom_*
+media/alerts/upload_*
 
 # Dependency (jika nanti memakai npm)
 node_modules/
+package-lock.json

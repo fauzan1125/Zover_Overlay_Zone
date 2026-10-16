@@ -74,9 +74,16 @@ class RunningTextEngine {
     if (this.isPollingAttached) return;
     this.isPollingAttached = true;
 
+    const getApiUrl = () => {
+      if (typeof window !== 'undefined' && window.location && window.location.origin && window.location.origin !== 'null' && !window.location.origin.startsWith('file:')) {
+        return `${window.location.origin}/api/config`;
+      }
+      return 'http://localhost:8765/api/config';
+    };
+
     const poll = async () => {
       try {
-        const res = await fetch('http://localhost:8765/api/config', { cache: 'no-store' });
+        const res = await fetch(getApiUrl(), { cache: 'no-store' });
         if (res.ok) {
           const cfg = await res.json();
           if (cfg && cfg.runningText) {
@@ -93,6 +100,12 @@ class RunningTextEngine {
   updateConfig(data) {
     if (!data) return;
 
+    const incomingHash = JSON.stringify(data);
+    if (this._lastConfigHash === incomingHash) {
+      return;
+    }
+    this._lastConfigHash = incomingHash;
+
     if (data.settings) {
       this.settings = { ...this.settings, ...data.settings };
       this.applyStyleVariables();
@@ -105,18 +118,35 @@ class RunningTextEngine {
         .sort((a, b) => (parseInt(a.sort_order, 10) || 0) - (parseInt(b.sort_order, 10) || 0));
     }
 
-    this.clearAllTimers();
-
     if (!this.settings.is_enabled || this.activeSlides.length === 0) {
+      this.clearAllTimers();
       this.hideAll();
       this.currentIndex = -1;
       this.currentSlide = null;
       return;
     }
 
-    this.currentIndex = -1;
-    this.currentSlide = null;
-    this.advanceToNextSlide();
+    if (this.currentIndex === -1 || !this.currentSlide) {
+      this.clearAllTimers();
+      this.currentIndex = -1;
+      this.advanceToNextSlide();
+      return;
+    }
+
+    if (this.currentIndex >= this.activeSlides.length) {
+      this.currentIndex = 0;
+    }
+
+    const currentActiveSlide = this.activeSlides[this.currentIndex];
+    if (currentActiveSlide) {
+      this.currentSlide = currentActiveSlide;
+      this.applySlideContent(currentActiveSlide, true);
+    }
+
+    if (!this.slideTimer && !this.isTransitioning) {
+      const dur = (this.currentSlide && this.currentSlide.duration_ms) || 3000;
+      this.scheduleNextSlide(dur);
+    }
   }
 
   applyStyleVariables() {

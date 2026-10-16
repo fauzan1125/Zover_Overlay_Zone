@@ -23,6 +23,7 @@
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="css/dashboard.css">
   <link rel="stylesheet" href="css/running_text.css">
+  <link rel="stylesheet" href="css/chalert.css">
 </head>
 <body>
 
@@ -80,6 +81,10 @@
         <button class="tab-btn" data-tab="runningtext" type="button">
           <span class="material-symbols-outlined">branding_watermark</span>
           <span>Running Text</span>
+        </button>
+        <button class="tab-btn" data-tab="chalert" type="button">
+          <span class="material-symbols-outlined">dynamic_form</span>
+          <span>Chalert</span>
         </button>
       </nav>
 
@@ -475,10 +480,18 @@
               </div>
               <p class="banner-desc">Membacakan setiap pesan masuk di stream dengan suara perempuan Bahasa Indonesia secara real-time.</p>
             </div>
-            <div class="d-flex align-items-center gap-2 bg-surface-lowest p-2 rounded">
-              <span class="font-label-mono text-muted" style="font-size:0.75rem">MASTER TTS:</span>
-              <div class="form-check form-switch mb-0">
-                <input class="form-check-input" type="checkbox" id="switch-tts-enable" checked>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+              <div class="d-flex align-items-center gap-2 bg-surface-lowest p-2 rounded">
+                <span class="font-label-mono text-muted" style="font-size:0.75rem">MASTER TTS:</span>
+                <div class="form-check form-switch mb-0">
+                  <input class="form-check-input" type="checkbox" id="switch-tts-enable" checked>
+                </div>
+              </div>
+              <div class="d-flex align-items-center gap-2 bg-surface-lowest p-2 rounded">
+                <span class="font-label-mono text-muted" style="font-size:0.75rem" title="Mute suara di dashboard saat OBS aktif untuk mencegah suara dobel">HANYA OBS:</span>
+                <div class="form-check form-switch mb-0">
+                  <input class="form-check-input" type="checkbox" id="switch-tts-overlay-only" checked title="Hanya bunyikan suara di OBS Overlay (Cegah Dobel Suara)">
+                </div>
               </div>
             </div>
           </div>
@@ -1034,6 +1047,194 @@
           </div>
         </div>
 
+        <!-- ==================================================================
+             TAB 8: CHALERT (SET UP > Chalert - Dynamic Island)
+             ================================================================== -->
+        <div class="tab-content" id="tab-chalert">
+          <div class="tab-header-banner">
+            <div>
+              <div class="d-flex align-items-center gap-2">
+                <h2 class="banner-title">Chalert (Dynamic Island iPhone 17)</h2>
+                <span class="badge-telemetry badge-telemetry-blue" id="badge-chalert-status">
+                  <span class="status-dot active"></span>DYNAMIC ISLAND READY
+                </span>
+              </div>
+              <p class="banner-desc">Satu kapsul terpadu untuk Chat & Alert (Gift, Follow, Like) dengan animasi elastis fluid morphing ala iPhone 17.</p>
+            </div>
+            <div class="d-flex align-items-center gap-2 mt-2 mt-md-0">
+              <button class="btn btn-sm mc-primary" id="btn-copy-chalert-url" type="button">
+                <span class="material-symbols-outlined" style="font-size:16px">content_copy</span>
+                <span>Salin Path Overlay</span>
+              </button>
+              <button class="btn btn-sm mc-ghost" id="btn-open-chalert-window" type="button">
+                <span class="material-symbols-outlined" style="font-size:16px">open_in_new</span>
+                <span>Buka Tab Overlay</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="row g-3">
+            <!-- Left: Settings -->
+            <div class="col-12 col-xl-5">
+              <div class="card h-100">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="material-symbols-outlined text-info" style="font-size:20px">tune</span>
+                    <h3 class="card-title mb-0">Konfigurasi Dynamic Island</h3>
+                  </div>
+                  <div class="form-check form-switch mb-0">
+                    <input class="form-check-input" type="checkbox" id="switch-chalert-enable" checked>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <div class="mb-3">
+                    <label class="form-label" for="select-chalert-position">Posisi di Layar OBS</label>
+                    <select class="form-select" id="select-chalert-position">
+                      <option value="top-center" selected>Atas Layar - Tengah (Top-Center)</option>
+                      <option value="bottom-center">Bawah Layar - Tengah (Bottom-Center)</option>
+                    </select>
+                  </div>
+
+                  <div class="mb-3">
+                    <label class="form-label" for="select-chalert-theme">Gaya Desain Tema</label>
+                    <select class="form-select" id="select-chalert-theme">
+                      <option value="iphone17-dark" selected>iPhone 17 Obsidian Dark (Solid)</option>
+                      <option value="iphone17-glass">iPhone 17 Frosted Glass (Blur)</option>
+                    </select>
+                  </div>
+
+                  <div class="mb-3 p-3 rounded-2" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06);">
+                    <div class="form-check form-switch mb-2">
+                      <input class="form-check-input" type="checkbox" id="switch-chalert-show-idle" checked>
+                      <label class="form-check-label fw-semibold" for="switch-chalert-show-idle">Tampilkan Kapsul Mini Saat Idle</label>
+                    </div>
+                    <label class="form-label text-muted" style="font-size:12px;" for="input-chalert-idle-text">Teks Status Saat Kapsul Kosong</label>
+                    <input type="text" class="form-control" id="input-chalert-idle-text" value="@lazuri1125" placeholder="@username">
+                  </div>
+
+                  <div class="mb-3 p-3 rounded-2" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06);">
+                    <div class="form-check form-switch mb-2">
+                      <input class="form-check-input" type="checkbox" id="switch-chalert-enable-chat" checked>
+                      <label class="form-check-label fw-semibold" for="switch-chalert-enable-chat">Tampilkan Pesan Live Chat di Island</label>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                      <label class="form-label mb-0 text-muted" style="font-size:12px;" for="range-chalert-chat-duration">Durasi Tampil Tiap Chat</label>
+                      <span class="badge-telemetry badge-telemetry-blue" id="val-chalert-chat-duration">4.5s</span>
+                    </div>
+                    <input type="range" class="form-range" id="range-chalert-chat-duration" min="2000" max="9000" step="500" value="4500">
+                  </div>
+
+                  <div class="mb-4">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                      <label class="form-label mb-0" for="range-chalert-volume">Volume Suara SFX Alert</label>
+                      <span class="badge-telemetry badge-telemetry-blue" id="val-chalert-volume">80%</span>
+                    </div>
+                    <input type="range" class="form-range" id="range-chalert-volume" min="0" max="100" step="5" value="80">
+                  </div>
+
+                  <button class="btn btn-sm mc-primary w-100 py-2" id="btn-save-chalert-config" type="button">
+                    <span class="material-symbols-outlined" style="font-size:16px">save</span>
+                    <span>Simpan & Terapkan Chalert</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: Interactive Live Simulation -->
+            <div class="col-12 col-xl-7">
+              <div class="card h-100">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="material-symbols-outlined text-info" style="font-size:20px">play_arrow</span>
+                    <h3 class="card-title mb-0">Pratinjau Live & Simulasi Interaktif</h3>
+                  </div>
+                  <span class="badge-telemetry badge-telemetry-green">INTERAKTIF</span>
+                </div>
+                <div class="card-body">
+                  <!-- Live Preview Sandbox -->
+                  <div class="mb-3">
+                    <label class="form-label mb-1">Pratinjau Kapsul (Live Physics)</label>
+                    <div class="chalert-preview-stage" id="chalertDashboardPreview" style="background: radial-gradient(circle at 50% 25%, #161822 0%, #08090c 100%); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; height: 180px; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+                      <div id="chalertStagePreview" class="chalert-stage pos-top-center" style="position: absolute; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; top: 0;">
+                        <div id="chalertIslandPreview" class="chalert-island state-idle">
+                          <div id="islandIdleViewPreview" class="island-idle-view">
+                            <span id="islandIdleTextPreview" class="idle-text">@lazuri1125</span>
+                          </div>
+                          <div id="islandCardViewPreview" class="island-card-view">
+                            <div class="island-avatar-wrap">
+                              <img id="islandAvatarPreview" class="island-avatar" alt="Avatar">
+                              <div id="islandPlatformBadgePreview" class="island-platform-badge">
+                                <img id="islandPlatformImgPreview" alt="Platform">
+                              </div>
+                            </div>
+                            <div class="island-body">
+                              <div class="island-meta-row">
+                                <span id="islandUsernamePreview" class="island-username">User</span>
+                                <span id="islandTagPreview" class="island-tag" style="display:none;">ALERT</span>
+                              </div>
+                              <div id="islandHighlightPreview" class="island-highlight" style="display:none;"></div>
+                              <div id="islandTextPreview" class="island-text"></div>
+                            </div>
+                            <div id="islandSideGraphicPreview" class="island-side-graphic" style="display:none;">
+                              <img id="islandSideIconPreview" class="side-gift-icon" alt="Gift">
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Test Buttons Grid -->
+                  <div class="mb-3">
+                    <label class="form-label mb-2">Simulasi Pengujian Event</label>
+                    <div class="row g-2">
+                      <div class="col-6 col-md-4">
+                        <button class="btn btn-sm mc-ghost w-100 py-2 d-flex align-items-center justify-content-center gap-1" id="btn-test-chalert-chat" type="button">
+                          <span class="material-symbols-outlined" style="font-size:16px">chat</span>
+                          <span>Tes Chat (P5)</span>
+                        </button>
+                      </div>
+                      <div class="col-6 col-md-4">
+                        <button class="btn btn-sm mc-ghost w-100 py-2 d-flex align-items-center justify-content-center gap-1" id="btn-test-chalert-follow" type="button">
+                          <span class="material-symbols-outlined" style="font-size:16px">person_add</span>
+                          <span>Tes Follow (P3)</span>
+                        </button>
+                      </div>
+                      <div class="col-6 col-md-4">
+                        <button class="btn btn-sm mc-ghost w-100 py-2 d-flex align-items-center justify-content-center gap-1" id="btn-test-chalert-like" type="button">
+                          <span class="material-symbols-outlined text-danger" style="font-size:16px">favorite</span>
+                          <span>Tes Like (P4)</span>
+                        </button>
+                      </div>
+                      <div class="col-6 col-md-6">
+                        <button class="btn btn-sm mc-primary w-100 py-2 d-flex align-items-center justify-content-center gap-1" id="btn-test-chalert-gift" type="button">
+                          <span class="material-symbols-outlined text-warning" style="font-size:16px">featured_seasonal_and_gifts</span>
+                          <span>Tes Gift Kopi x5 (P1)</span>
+                        </button>
+                      </div>
+                      <div class="col-6 col-md-6">
+                        <button class="btn btn-sm mc-primary w-100 py-2 d-flex align-items-center justify-content-center gap-1" id="btn-test-chalert-big-gift" type="button">
+                          <span class="material-symbols-outlined text-success" style="font-size:16px">monetization_on</span>
+                          <span>Tes Saweria Rp 50.000 (P1)</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Logic Architecture Hint -->
+                  <div class="p-3 rounded-2" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); font-size: 12px; color: var(--mc-text-muted);">
+                    <div class="fw-semibold text-white mb-1 d-flex align-items-center gap-1">
+                      <span class="material-symbols-outlined text-info" style="font-size:15px">info</span>
+                      <span>Logika Priority Pre-emption:</span>
+                    </div>
+                    P1 (Gift / Donasi) akan langsung memotong tampilan Chat yang sedang berjalan. Antrean chat otomatis dibatasi maksimal 3 pesan terbaru (*latest-wins*) agar tidak pernah terjadi backlog penundaan.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </main>
     </div>
   </div>
@@ -1061,6 +1262,7 @@
   <script src="js/connectors/tikfinity.js?v=20260930_4"></script>
   <script src="js/viewcount.js?v=20260930_4"></script>
   <script src="js/running_text.js?v=20261016_1"></script>
+  <script src="js/chalert.js?v=20261016_1"></script>
   <script src="js/app.js?v=20261016_1"></script>
 
 </body>

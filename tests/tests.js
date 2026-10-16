@@ -727,6 +727,150 @@
     console.groupEnd();
   }
 
+  // =========================================================================
+  // SUITE 11: Chalert (Dynamic Island Widget - ChalertWidget)
+  // =========================================================================
+  function runChalertTests() {
+    console.group('--- 11. ChalertWidget Tests ---');
+
+    const fixture = document.createElement('div');
+    fixture.innerHTML = `
+      <div id="testChalertStage" class="chalert-stage pos-top-center">
+        <div id="testChalertIsland" class="chalert-island state-idle">
+          <div id="testIslandIdleView" class="island-idle-view">
+            <span id="testIslandIdleText" class="idle-text">@live</span>
+          </div>
+          <div id="testIslandCardView" class="island-card-view">
+            <img id="testIslandAvatar" class="island-avatar">
+            <div id="testIslandPlatformBadge" class="island-platform-badge">
+              <img id="testIslandPlatformImg">
+            </div>
+            <div class="island-body">
+              <span id="testIslandUsername" class="island-username"></span>
+              <span id="testIslandTag" class="island-tag"></span>
+              <div id="testIslandHighlight" class="island-highlight"></div>
+              <div id="testIslandText" class="island-text"></div>
+            </div>
+            <div id="testIslandSideGraphic" class="island-side-graphic">
+              <img id="testIslandSideIcon" class="side-gift-icon">
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(fixture);
+
+    const widget = new ChalertWidget();
+    widget.init({
+      stage: fixture.querySelector('#testChalertStage'),
+      island: fixture.querySelector('#testChalertIsland'),
+      idleView: fixture.querySelector('#testIslandIdleView'),
+      idleText: fixture.querySelector('#testIslandIdleText'),
+      cardView: fixture.querySelector('#testIslandCardView'),
+      avatar: fixture.querySelector('#testIslandAvatar'),
+      platformBadge: fixture.querySelector('#testIslandPlatformBadge'),
+      platformImg: fixture.querySelector('#testIslandPlatformImg'),
+      username: fixture.querySelector('#testIslandUsername'),
+      tag: fixture.querySelector('#testIslandTag'),
+      text: fixture.querySelector('#testIslandText'),
+      highlight: fixture.querySelector('#testIslandHighlight'),
+      sideIcon: fixture.querySelector('#testIslandSideIcon'),
+      sideGraphic: fixture.querySelector('#testIslandSideGraphic')
+    });
+
+    // 11.1 URL Sanitization
+    runner.assert('Chalert: Sanitize javascript: URL into safe avatar fallback', widget.sanitizeUrl('javascript:alert(1)').startsWith('data:image/svg+xml'));
+    runner.assertEqual('Chalert: Allow safe media/ path', widget.sanitizeUrl('media/alerts/kaching-sound-fx.mp3'), 'media/alerts/kaching-sound-fx.mp3');
+    runner.assertEqual('Chalert: Allow safe https URL', widget.sanitizeUrl('https://example.com/avatar.jpg'), 'https://example.com/avatar.jpg');
+
+    // 11.2 Anti-XSS Rendering Verification
+    const xssUsername = '<b onclick="alert(1)">Hacker</b>';
+    const xssMessage = '<img src=x onerror="alert(1)">Normal message';
+    widget.renderChatCard({
+      platform: 'tiktok',
+      username: xssUsername,
+      message: xssMessage,
+      avatar: 'logo_platform/tiktok.jpg'
+    });
+
+    runner.assertEqual('Chalert: Anti-XSS username preserved via textContent', widget.dom.username.textContent, xssUsername);
+    runner.assert('Chalert: Anti-XSS ensures no b tag in username DOM', widget.dom.username.querySelector('b') === null);
+    runner.assertEqual('Chalert: Anti-XSS message preserved via textContent', widget.dom.text.textContent, xssMessage);
+    runner.assert('Chalert: Anti-XSS ensures no img tag in message DOM', widget.dom.text.querySelector('img') === null);
+    runner.assert('Chalert: Immediate chat rendering puts island in state-chat', widget.dom.island.classList.contains('state-chat'));
+
+    // 11.3 Alert Rendering & Preemption
+    widget.handleIncomingAlert({
+      type: 'tiktok_gift',
+      user: 'Sultan',
+      gift: 'Kopi',
+      count: 5,
+      avatar: 'logo_platform/tiktok.jpg',
+      comment: 'Semangat bang!'
+    });
+
+    runner.assert('Chalert: Gift alert puts island in state-major-alert', widget.dom.island.classList.contains('state-major-alert'));
+    runner.assertEqual('Chalert: Highlight text displays gift and count', widget.dom.highlight.textContent, 'Kopi x5');
+
+    // 11.4 Micro Alert Rendering
+    widget.currentAlert = null;
+    widget.handleIncomingAlert({
+      type: 'tiktok_follow',
+      user: 'FollowerBaru',
+      avatar: 'logo_platform/tiktok.jpg'
+    });
+
+    runner.assert('Chalert: Follow alert puts island in state-micro-alert', widget.dom.island.classList.contains('state-micro-alert'));
+
+    // 11.5 Deduplication & Alert Config Parity
+    widget.applyFullConfig({
+      alertSoundVolume: 0.8,
+      alertDuration: 6,
+      alerts: {
+        tiktok_gift: {
+          enabled: true,
+          title: 'TERIMA KASIH {user} SUDAH GIFT {gift} x{count}',
+          soundUrl: 'media/alerts/kaching-sound-fx.mp3'
+        }
+      }
+    });
+
+    const giftCfg = widget.getAlertConfig('gift', 'tiktok');
+    runner.assertEqual('Chalert: Map gift type to tiktok_gift config', giftCfg.soundUrl, 'media/alerts/kaching-sound-fx.mp3');
+
+    // Duplicate ID protection test
+    const dupAlertId = 'test_dup_123';
+    widget.currentAlert = null;
+    widget.handleIncomingAlert({ id: dupAlertId, type: 'tiktok_gift', user: 'User1', gift: 'Rose', count: 1 });
+    runner.assert('Chalert: First alert with ID processes into processedAlertIds', widget.processedAlertIds.has(dupAlertId));
+
+    const queueBefore = widget.alertQueue.length;
+    widget.handleIncomingAlert({ id: dupAlertId, type: 'tiktok_gift', user: 'User1', gift: 'Rose', count: 1 });
+    runner.assertEqual('Chalert: Duplicate alert with same ID is blocked and not added to queue', widget.alertQueue.length, queueBefore);
+
+    // 11.6 Audio & TTS Integration
+    runner.assert('Chalert: TTS instance initialized on widget', widget.tts !== null && typeof widget.tts === 'object');
+    runner.assertEqual('Chalert: soundVolume option parsed', typeof widget.options.soundVolume, 'number');
+
+    let ttsSpoke = false;
+    const origSpeak = widget.tts.speakMessage;
+    widget.tts.speakMessage = () => { ttsSpoke = true; };
+    widget.handleIncomingChat({ platform: 'tiktok', username: 'Tester', message: 'Tes Suara TTS Chalert' }, false);
+    runner.assert('Chalert: handleIncomingChat triggers tts.speakMessage when skipTTS is false', ttsSpoke);
+    widget.tts.speakMessage = origSpeak;
+
+    // 11.7 Idle State
+    widget.currentAlert = null;
+    widget.showIdle();
+    runner.assert('Chalert: showIdle returns island to state-idle', widget.dom.island.classList.contains('state-idle'));
+
+    // Teardown
+    if (widget.chatHideTimer) clearTimeout(widget.chatHideTimer);
+    if (widget.alertTimer) clearTimeout(widget.alertTimer);
+    fixture.remove();
+    console.groupEnd();
+  }
+
   // Main Test Runner Entrypoint
   root.runAllTests = function () {
     console.clear();
@@ -747,6 +891,7 @@
     runAlertOverlayTests();
     runApplicationTests();
     runRunningTextTests();
+    runChalertTests();
 
     console.log(
       `%c=======================================================\n🏁 Test Finished: ${runner.passed} Passed, ${runner.failed} Failed out of ${runner.total} Tests\n=======================================================`,

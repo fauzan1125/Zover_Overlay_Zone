@@ -61,6 +61,9 @@ $global:cookieContainer = New-Object System.Net.CookieContainer
 $global:cookieContainer.Add((New-Object System.Net.Cookie("CONSENT", "PENDING+999", "/", ".youtube.com")))
 $global:cookieContainer.Add((New-Object System.Net.Cookie("SOCS", "CAISNQgDEitib3FfaWRlbnRpdHlmcm9udGVuZHVpc2VydmVyXzIwMjMwODI5LjA3X3AxGgJlbiACGgYIgJnSmgY", "/", ".youtube.com")))
 
+# Global event queue for cross-process OBS Browser Source & Dashboard sync
+$global:eventQueue = [System.Collections.ArrayList]::Synchronized((New-Object System.Collections.ArrayList))
+
 # Tolak request lintas-origin (CSRF) kecuali dari server localhost ini sendiri.
 # Request non-browser (curl) tanpa header Origin tetap diizinkan.
 function Test-LocalOrigin($req) {
@@ -127,6 +130,73 @@ while ($listener.IsListening) {
                 $response.ContentLength64 = $okBytes.Length
                 $response.OutputStream.Write($okBytes, 0, $okBytes.Length)
                 $response.OutputStream.Flush()
+            }
+            $response.Close()
+            continue
+        }
+
+        # ============================================================
+        # API: REAL-TIME CROSS-PROCESS EVENT BRIDGE (/api/events)
+        # Allows Dashboard in Chrome and Overlays in OBS CEF to sync 100% reliably
+        # ============================================================
+        if ($urlPath -eq "/api/events") {
+            $response.ContentType = "application/json; charset=utf-8"
+
+            if ($request.HttpMethod -eq "GET") {
+                $since = 0
+                if ($request.QueryString["since"]) {
+                    [long]::TryParse($request.QueryString["since"], [ref]$since) | Out-Null
+                }
+
+                $matchingEvents = @()
+                $allEvents = $global:eventQueue.ToArray()
+                foreach ($evt in $allEvents) {
+                    if ($evt.timestamp -gt $since) {
+                        $matchingEvents += $evt
+                    }
+                }
+
+                $jsonOut = ConvertTo-Json -InputObject @($matchingEvents) -Compress -Depth 5
+                $outBytes = [System.Text.Encoding]::UTF8.GetBytes($jsonOut)
+                $response.StatusCode = 200
+                $response.ContentLength64 = $outBytes.Length
+                $response.OutputStream.Write($outBytes, 0, $outBytes.Length)
+                $response.OutputStream.Flush()
+            } elseif ($request.HttpMethod -eq "POST") {
+                if (-not (Test-LocalOrigin $request)) {
+                    $response.StatusCode = 403
+                    $response.Close()
+                    continue
+                }
+
+                $encoding = if ($request.ContentEncoding) { $request.ContentEncoding } else { [System.Text.Encoding]::UTF8 }
+                $reader = New-Object System.IO.StreamReader($request.InputStream, $encoding)
+                $body = $reader.ReadToEnd()
+                $reader.Close()
+
+                try {
+                    $evtObj = ConvertFrom-Json $body
+                    if (-not $evtObj.timestamp) {
+                        $evtObj | Add-Member -MemberType NoteProperty -Name "timestamp" -Value ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()) -Force
+                    }
+                    [void]$global:eventQueue.Add($evtObj)
+
+                    while ($global:eventQueue.Count -gt 100) {
+                        [void]$global:eventQueue.RemoveAt(0)
+                    }
+
+                    $response.StatusCode = 200
+                    $okBytes = [System.Text.Encoding]::UTF8.GetBytes('{"status":"ok"}')
+                    $response.ContentLength64 = $okBytes.Length
+                    $response.OutputStream.Write($okBytes, 0, $okBytes.Length)
+                    $response.OutputStream.Flush()
+                } catch {
+                    $response.StatusCode = 400
+                    $errBytes = [System.Text.Encoding]::UTF8.GetBytes('{"error":"Invalid JSON payload"}')
+                    $response.ContentLength64 = $errBytes.Length
+                    $response.OutputStream.Write($errBytes, 0, $errBytes.Length)
+                    $response.OutputStream.Flush()
+                }
             }
             $response.Close()
             continue

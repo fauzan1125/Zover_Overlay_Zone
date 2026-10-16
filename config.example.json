@@ -5,6 +5,7 @@
   "tiktokUsername": "",
   "tiktokApiToken": "",
   "ttsEnabled": true,
+  "ttsOverlayOnly": true,
   "ttsVolume": 1,
   "ttsRate": 1,
   "ttsPitch": 1,
@@ -121,5 +122,54 @@
         "is_active": true
       }
     ]
+  },
+  "chalert": {
+    "enabled": true,
+    "position": "top-center",
+    "theme": "iphone17-dark",
+    "showIdlePill": true,
+    "idleText": "@lazuri1125",
+    "enableChat": true,
+    "chatDisplayMs": 4500,
+    "chatCooldownMs": 1000,
+    "maxQueueSize": 50,
+    "soundVolume": 0.8,
+    "rules": {
+      "gift": {
+        "enabled": true,
+        "priority": 1,
+        "durationMs": 5000,
+        "accentColor": "#FF9500",
+        "soundUrl": "media/alerts/kaching-sound-fx.mp3"
+      },
+      "donation": {
+        "enabled": true,
+        "priority": 1,
+        "durationMs": 5000,
+        "accentColor": "#10B981",
+        "soundUrl": "media/alerts/kaching-sound-fx.mp3"
+      },
+      "follow": {
+        "enabled": true,
+        "priority": 3,
+        "durationMs": 4000,
+        "accentColor": "#3B82F6",
+        "soundUrl": "media/alerts/default_alert.mp3"
+      },
+      "like": {
+        "enabled": true,
+        "priority": 4,
+        "durationMs": 3500,
+        "accentColor": "#EC4899",
+        "soundUrl": "media/alerts/anime-wow-sound-effect.mp3"
+      },
+      "share": {
+        "enabled": true,
+        "priority": 3,
+        "durationMs": 3500,
+        "accentColor": "#8B5CF6",
+        "soundUrl": "media/alerts/default_alert.mp3"
+      }
+    }
   }
 }

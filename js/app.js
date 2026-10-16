@@ -6,14 +6,20 @@
 function initApp() {
   if (window.app) return;
   const urlParams = new URLSearchParams(window.location.search);
-  const isOverlayMode = urlParams.get('mode') === 'overlay' || window.location.pathname.toLowerCase().endsWith('overlay_chat.html');
+  const path = window.location.pathname.toLowerCase();
+  const isChalertOverlay = path.endsWith('overlay_chalert.html') || urlParams.get('mode') === 'chalert';
+  const isChatOverlay = path.endsWith('overlay_chat.html') || urlParams.get('mode') === 'overlay';
+  const isOverlayMode = isChalertOverlay || isChatOverlay;
 
   if (isOverlayMode) {
     document.body.classList.add('mode-overlay');
+    if (isChalertOverlay) {
+      document.body.classList.add('mode-chalert-overlay');
+    }
   }
 
   // Initialize Application Instance
-  window.app = new Application(isOverlayMode);
+  window.app = new Application(isOverlayMode, isChalertOverlay);
 }
 
 if (document.readyState === 'loading') {
@@ -23,12 +29,14 @@ if (document.readyState === 'loading') {
 }
 
 class Application {
-  constructor(isOverlayMode) {
+  constructor(isOverlayMode, isChalertMode = false) {
     this.isOverlayMode = isOverlayMode;
+    this.isChalertMode = isChalertMode;
     this.storageKey = 'chat_overlay_mbak_google_config';
     this.triggerKey = 'chat_overlay_mbak_google_trigger';
     this.liveChatKey = 'chat_overlay_mbak_google_live_chat';
     this.seenMessageIds = new Set();
+    this.seenAlertIds = new Set();
 
     // Default Configuration State
     this.config = {
@@ -40,6 +48,7 @@ class Application {
 
       // TTS Settings
       ttsEnabled: true,
+      ttsOverlayOnly: true,
       ttsVolume: 1.0,
       ttsRate: 1.0,
       ttsPitch: 1.0,
@@ -156,8 +165,33 @@ class Application {
             is_active: true
           }
         ]
+      },
+      chalert: {
+        enabled: true,
+        position: 'top-center',
+        theme: 'iphone17-dark',
+        showIdlePill: true,
+        idleText: '@lazuri1125',
+        enableChat: true,
+        chatDisplayMs: 4500,
+        chatCooldownMs: 1000,
+        maxQueueSize: 50,
+        soundVolume: 0.8,
+        rules: {
+          gift: { enabled: true, priority: 1, durationMs: 5000, accentColor: '#FF9500', soundUrl: 'media/alerts/kaching-sound-fx.mp3' },
+          donation: { enabled: true, priority: 1, durationMs: 5000, accentColor: '#10B981', soundUrl: 'media/alerts/kaching-sound-fx.mp3' },
+          follow: { enabled: true, priority: 3, durationMs: 4000, accentColor: '#3B82F6', soundUrl: 'media/alerts/default_alert.mp3' },
+          like: { enabled: true, priority: 4, durationMs: 3500, accentColor: '#EC4899', soundUrl: 'media/alerts/anime-wow-sound-effect.mp3' },
+          share: { enabled: true, priority: 3, durationMs: 3500, accentColor: '#8B5CF6', soundUrl: 'media/alerts/default_alert.mp3' }
+        }
       }
     };
+
+    // Chalert Broadcast Channel & Storage Key
+    try {
+      this.chalertBroadcastChannel = new BroadcastChannel('zover_chalert_channel');
+    } catch (e) {}
+    this.chalertTriggerKey = 'zover_chalert_event';
 
     // Alert Broadcast Channel & Storage Key
     try {
@@ -201,10 +235,15 @@ class Application {
       document.getElementById('obs-overlay-view')?.remove();
     }
 
-    // Initialize Overlay Renderer
+    // Initialize Overlay Renderer (for regular chatbox overlay_chat.html and dashboard chat list)
     const containerId = this.isOverlayMode ? 'chat-stream-list-obs' : 'chat-stream-list';
     const container = document.getElementById(containerId);
-    this.renderer = new OverlayRenderer(container);
+    if (container && typeof OverlayRenderer !== 'undefined') {
+      this.renderer = new OverlayRenderer(container);
+    } else {
+      this.renderer = null;
+    }
+
     // ViewCount hanya hidup bila halaman punya bar (preview dashboard);
     // overlay_chat.html tidak memuat viewcount.js sehingga dilewati.
     if (document.getElementById('viewcount-bar') && typeof ViewCountMonitor !== 'undefined') {
@@ -214,6 +253,51 @@ class Application {
     // Initialize Dashboard Running Text Preview Engine
     if (!this.isOverlayMode && document.getElementById('rt-dashboard-preview') && typeof RunningTextEngine !== 'undefined') {
       this.dashboardRunningTextEngine = new RunningTextEngine(document.getElementById('rt-dashboard-preview'), { disableSync: true });
+    }
+
+    // Initialize Chalert Widget in Overlay (OBS) or Dashboard Preview
+    if (this.isChalertMode && typeof ChalertWidget !== 'undefined') {
+      const stage = document.getElementById('chalertStage');
+      const island = document.getElementById('chalertIsland');
+      if (island) {
+        this.chalertWidget = new ChalertWidget(Object.assign({}, this.config.chalert || {}, { disableSync: true }));
+        this.chalertWidget.init({
+          stage: stage,
+          island: island,
+          idleView: document.getElementById('islandIdleView'),
+          idleText: document.getElementById('islandIdleText'),
+          cardView: document.getElementById('islandCardView'),
+          avatar: document.getElementById('islandAvatar'),
+          platformBadge: document.getElementById('islandPlatformBadge'),
+          platformImg: document.getElementById('islandPlatformImg'),
+          username: document.getElementById('islandUsername'),
+          tag: document.getElementById('islandTag'),
+          text: document.getElementById('islandText'),
+          highlight: document.getElementById('islandHighlight'),
+          sideIcon: document.getElementById('islandSideIcon'),
+          sideGraphic: document.getElementById('islandSideGraphic'),
+          audioPlayer: document.getElementById('chalert-audio-player') || document.getElementById('chalertAudioPlayer') || document.getElementById('alert-audio-player')
+        });
+        window.chalertWidget = this.chalertWidget;
+      }
+    } else if (!this.isOverlayMode && document.getElementById('chalertIslandPreview') && typeof ChalertWidget !== 'undefined') {
+      this.dashboardChalertWidget = new ChalertWidget(Object.assign({}, this.config.chalert || {}, { disableSync: true, isDashboardPreview: true }));
+      this.dashboardChalertWidget.init({
+        stage: document.getElementById('chalertStagePreview'),
+        island: document.getElementById('chalertIslandPreview'),
+        idleView: document.getElementById('islandIdleViewPreview'),
+        idleText: document.getElementById('islandIdleTextPreview'),
+        cardView: document.getElementById('islandCardViewPreview'),
+        avatar: document.getElementById('islandAvatarPreview'),
+        platformBadge: document.getElementById('islandPlatformBadgePreview'),
+        platformImg: document.getElementById('islandPlatformImgPreview'),
+        username: document.getElementById('islandUsernamePreview'),
+        tag: document.getElementById('islandTagPreview'),
+        text: document.getElementById('islandTextPreview'),
+        highlight: document.getElementById('islandHighlightPreview'),
+        sideIcon: document.getElementById('islandSideIconPreview'),
+        sideGraphic: document.getElementById('islandSideGraphicPreview')
+      });
     }
 
     this.bindDashboardEvents(); // Bind events after services are ready
@@ -233,6 +317,14 @@ class Application {
         this.dashboardRunningTextEngine.updateConfig(this.config.runningText);
       }
 
+      if (this.dashboardChalertWidget) {
+        this.dashboardChalertWidget.applyFullConfig(this.config);
+      }
+
+      if (this.chalertWidget) {
+        this.chalertWidget.applyFullConfig(this.config);
+      }
+
       if (!this.isOverlayMode) {
         this.updateUIFromConfig();
         this.renderRunningTextSlideCards();
@@ -245,9 +337,16 @@ class Application {
     });
   }
 
+  getConfigApiUrl() {
+    if (typeof window !== 'undefined' && window.location && window.location.origin && window.location.origin !== 'null' && !window.location.origin.startsWith('file:')) {
+      return `${window.location.origin}/api/config`;
+    }
+    return 'http://localhost:8765/api/config';
+  }
+
   async pollOverlayConfig() {
     try {
-      const res = await fetch('http://localhost:8765/api/config', { cache: 'no-store' });
+      const res = await fetch(this.getConfigApiUrl(), { cache: 'no-store' });
       if (res.ok) {
         const newConfig = await res.json();
         
@@ -261,6 +360,9 @@ class Application {
         // Apply aesthetic & TTS changes immediately
         this.applyTTSSettings();
         this.applyRendererConfig();
+        if (this.chalertWidget) {
+          this.chalertWidget.applyFullConfig(this.config);
+        }
         if (this.tikfinity && this.config.alerts?.tiktok_like?.milestoneStep) {
           this.tikfinity.setMilestoneStep(this.config.alerts.tiktok_like.milestoneStep);
         }
@@ -285,6 +387,23 @@ class Application {
         }
       }
     } catch (e) {}
+  }
+
+  autoConnectOverlay() {
+    if (!this.isOverlayMode) return;
+    console.log('[OBS Overlay] Menghubungkan konektor live stream secara otomatis...');
+    if (this.config.kickUsername && this.kick) {
+      this.kick.connect(this.config.kickUsername);
+    }
+    if (this.config.ytVideoInput && this.youtube) {
+      this.youtube.connect(this.config.ytVideoInput, this.config.ytApiKey);
+    }
+    if (this.config.tiktokUsername && this.tiktok) {
+      this.tiktok.connect(this.config.tiktokUsername, this.config.tiktokApiToken);
+    }
+    if (this.tikfinity) {
+      this.tikfinity.connect();
+    }
   }
 
   applyTTSSettings() {
@@ -333,27 +452,43 @@ class Application {
   handleIncomingChat(chatData, isFromSync = false) {
     if (!chatData || !chatData.message) return;
 
-    const msgId = chatData.id || `${chatData.platform}-${Date.now()}-${Math.random()}`;
+    const rawUser = chatData.username || chatData.user || 'Viewer';
+    const rawMsg = chatData.message || chatData.text || '';
+    const timeWindow = Math.floor(Date.now() / 3000);
+    const msgId = chatData.id || `${chatData.platform || 'chat'}_${rawUser}_${rawMsg}_${timeWindow}`;
+    chatData.id = msgId;
+
     if (this.seenMessageIds.has(msgId)) return;
     this.seenMessageIds.add(msgId);
 
-    this.logActivity(`${chatData.platform} • ${chatData.username}: ${chatData.message}`, 'chat');
+    this.logActivity(`${chatData.platform} • ${rawUser}: ${rawMsg}`, 'chat');
 
     if (this.seenMessageIds.size > 1000) {
       this.seenMessageIds = new Set(Array.from(this.seenMessageIds).slice(-400));
     }
 
-    // 1. Render Chat Card in Overlay
+    // 1. Render in Chalert Dynamic Island (OBS Overlay or Dashboard Preview)
+    if (this.chalertWidget) {
+      this.chalertWidget.handleIncomingChat(chatData, true);
+    } else if (this.dashboardChalertWidget) {
+      this.dashboardChalertWidget.handleIncomingChat(chatData, true);
+    }
+
+    // 2. Render Chat Card in Regular Overlay
     if (this.renderer) {
       this.renderer.addMessage(chatData);
     }
 
-    // 2. Read Comment with Mbak Google TTS
-    if (this.tts) {
-      this.tts.speakMessage(chatData);
+    // 3. Read Comment with Mbak Google TTS
+    // Hanya bunyikan jika TTS aktif; jika ttsOverlayOnly aktif, dashboard hening saat OBS aktif (kecuali event uji coba)
+    if (this.tts && this.config.ttsEnabled !== false) {
+      const shouldSpeak = this.isOverlayMode || !this.config.ttsOverlayOnly || Boolean(chatData.isTest);
+      if (shouldSpeak) {
+        this.tts.speakMessage(chatData);
+      }
     }
 
-    // 3. Broadcast to other open windows if originated locally
+    // 4. Broadcast to other open windows if originated locally
     if (!isFromSync) {
       this.broadcastLiveChat(chatData);
     }
@@ -364,6 +499,17 @@ class Application {
     const pName = (alertData.platform || 'ALERT').toUpperCase();
     const uName = alertData.user || 'Viewer';
     const aType = alertData.type || 'alert';
+    const timeWindow = Math.floor(Date.now() / 3000);
+    const alertId = alertData.id || `${pName.toLowerCase()}_${aType}_${uName}_${alertData.gift || ''}_${alertData.count || ''}_${timeWindow}`;
+    alertData.id = alertId;
+
+    // Filter duplicate alerts arriving via multiple channels
+    if (this.seenAlertIds.has(alertId)) return;
+    this.seenAlertIds.add(alertId);
+    if (this.seenAlertIds.size > 500) {
+      const oldest = this.seenAlertIds.values().next().value;
+      this.seenAlertIds.delete(oldest);
+    }
 
     let logDesc = `${pName} ALERT • ${uName}`;
     if (aType === 'tiktok_gift') logDesc += ` kirim Gift ${alertData.gift || ''} x${alertData.count || 1}`;
@@ -373,6 +519,13 @@ class Application {
 
     this.logActivity(logDesc, 'ok');
 
+    // 1. Render in Chalert Dynamic Island (OBS Overlay or Dashboard Preview)
+    if (this.chalertWidget) {
+      this.chalertWidget.handleIncomingAlert(alertData);
+    } else if (this.dashboardChalertWidget) {
+      this.dashboardChalertWidget.handleIncomingAlert(alertData);
+    }
+
     if (!isFromSync) {
       this.broadcastAlert(alertData);
     }
@@ -380,7 +533,8 @@ class Application {
 
   broadcastAlert(alertData) {
     const alertId = alertData.id || `alt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const normalizedData = { ...alertData, id: alertId };
+    alertData.id = alertId;
+    const normalizedData = { ...alertData };
     const payload = {
       type: 'ALERT_TRIGGER',
       id: alertId,
@@ -399,6 +553,43 @@ class Application {
     try {
       localStorage.setItem(this.alertTriggerKey, JSON.stringify(payload));
     } catch (e) {}
+
+    // 3. Send to Server Event Bridge for OBS CEF overlays
+    this.broadcastEventToServer(payload);
+  }
+
+  broadcastChalertEvent(payload) {
+    if (!payload) return;
+    const eventObj = {
+      type: 'CHALERT_EVENT',
+      payload: payload,
+      timestamp: Date.now()
+    };
+
+    try {
+      if (this.chalertBroadcastChannel) {
+        this.chalertBroadcastChannel.postMessage(eventObj);
+      }
+    } catch (_) {}
+
+    try {
+      localStorage.setItem(this.chalertTriggerKey, JSON.stringify(eventObj));
+    } catch (_) {}
+
+    // 3. Send to Server Event Bridge for OBS CEF overlays
+    this.broadcastEventToServer(eventObj);
+  }
+
+  broadcastEventToServer(evt) {
+    if (this.isOverlayMode || !evt) return;
+    try {
+      const url = this.getConfigApiUrl().replace('/api/config', '/api/events');
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(evt)
+      }).catch(() => {});
+    } catch (_) {}
   }
 
   triggerTestAlert(alertType) {
@@ -433,7 +624,7 @@ class Application {
       }
     };
 
-    const data = samples[alertType] || samples.yt_sub;
+    const data = Object.assign({}, samples[alertType] || samples.yt_sub, { isTest: true });
     this.handleIncomingAlert(data, false);
   }
 
@@ -512,6 +703,9 @@ class Application {
         this.broadcastChannel.postMessage(payload);
       }
     } catch (e) {}
+
+    // 3. Send to Server Event Bridge for OBS CEF overlays
+    this.broadcastEventToServer(payload);
   }
 
   handleStatusUpdate(status) {
@@ -585,10 +779,40 @@ class Application {
           }
         };
       }
+      if ('BroadcastChannel' in window) {
+        if (!this.chalertBroadcastChannel) this.chalertBroadcastChannel = new BroadcastChannel('zover_chalert_channel');
+        this.chalertBroadcastChannel.onmessage = (event) => {
+          if (event.data && event.data.type === 'CHALERT_CONFIG_UPDATE') {
+            this.config.chalert = event.data.config;
+            if (this.dashboardChalertWidget) {
+              this.dashboardChalertWidget.applyConfig(this.config.chalert);
+            }
+            if (this.chalertWidget) {
+              this.chalertWidget.applyConfig(this.config.chalert);
+            }
+          } else if (event.data && event.data.type === 'CHALERT_EVENT' && event.data.payload) {
+            if (this.chalertWidget) {
+              this.chalertWidget.handleDirectChalertPayload(event.data.payload);
+            }
+          }
+        };
+      }
     } catch (e) {}
 
     // 2. LocalStorage Storage Event Listener
     window.addEventListener('storage', (e) => {
+      // Sync Chalert Direct Triggers
+      if (e.key === this.chalertTriggerKey && e.newValue) {
+        try {
+          const payload = JSON.parse(e.newValue);
+          if (payload.type === 'CHALERT_EVENT' && payload.payload) {
+            if (this.chalertWidget) {
+              this.chalertWidget.handleDirectChalertPayload(payload.payload);
+            }
+          }
+        } catch (_) {}
+      }
+
       // Sync Running Text Triggers
       if (e.key === this.runningTextTriggerKey && e.newValue) {
         try {
@@ -669,7 +893,8 @@ class Application {
   }
 
   triggerTestChat(chatData) {
-    this.handleIncomingChat(chatData, false);
+    const data = Object.assign({}, chatData, { isTest: true });
+    this.handleIncomingChat(data, false);
   }
 
   triggerTestTTS() {
@@ -712,7 +937,8 @@ class Application {
           tts: 'Baca Komentar',
           viewcount: 'Viewcount',
           alerts: 'Alert',
-          runningtext: 'Running Text'
+          runningtext: 'Running Text',
+          chalert: 'Chalert'
         };
         const pageTitle = tabTitleMap[targetTab] || targetTab;
         const bcSection = document.getElementById('bc-section-name');
@@ -798,6 +1024,11 @@ class Application {
     // TTS Settings Controls
     document.getElementById('switch-tts-enable')?.addEventListener('change', (e) => {
       this.config.ttsEnabled = e.target.checked;
+      this.notifyConfigChange();
+    });
+
+    document.getElementById('switch-tts-overlay-only')?.addEventListener('change', (e) => {
+      this.config.ttsOverlayOnly = e.target.checked;
       this.notifyConfigChange();
     });
 
@@ -1076,6 +1307,99 @@ class Application {
         btn.innerHTML = oldHtml;
       }, 2000);
     });
+
+    // Chalert Dashboard Settings Listeners
+    document.getElementById('switch-chalert-enable')?.addEventListener('change', (e) => {
+      if (!this.config.chalert) this.config.chalert = {};
+      this.config.chalert.enabled = e.target.checked;
+      this.notifyConfigChange();
+    });
+
+    document.getElementById('select-chalert-position')?.addEventListener('change', (e) => {
+      if (!this.config.chalert) this.config.chalert = {};
+      this.config.chalert.position = e.target.value;
+      this.notifyConfigChange();
+    });
+
+    document.getElementById('select-chalert-theme')?.addEventListener('change', (e) => {
+      if (!this.config.chalert) this.config.chalert = {};
+      this.config.chalert.theme = e.target.value;
+      this.notifyConfigChange();
+    });
+
+    document.getElementById('switch-chalert-show-idle')?.addEventListener('change', (e) => {
+      if (!this.config.chalert) this.config.chalert = {};
+      this.config.chalert.showIdlePill = e.target.checked;
+      this.notifyConfigChange();
+    });
+
+    document.getElementById('input-chalert-idle-text')?.addEventListener('input', (e) => {
+      if (!this.config.chalert) this.config.chalert = {};
+      this.config.chalert.idleText = e.target.value;
+      this.notifyConfigChange();
+    });
+
+    document.getElementById('switch-chalert-enable-chat')?.addEventListener('change', (e) => {
+      if (!this.config.chalert) this.config.chalert = {};
+      this.config.chalert.enableChat = e.target.checked;
+      this.notifyConfigChange();
+    });
+
+    document.getElementById('range-chalert-chat-duration')?.addEventListener('input', (e) => {
+      const val = parseInt(e.target.value, 10);
+      const valEl = document.getElementById('val-chalert-chat-duration');
+      if (valEl) valEl.innerText = `${(val / 1000).toFixed(1)}s`;
+      if (!this.config.chalert) this.config.chalert = {};
+      this.config.chalert.chatDisplayMs = val;
+      this.notifyConfigChange();
+    });
+
+    document.getElementById('range-chalert-volume')?.addEventListener('input', (e) => {
+      const val = parseInt(e.target.value, 10);
+      const valEl = document.getElementById('val-chalert-volume');
+      if (valEl) valEl.innerText = `${val}%`;
+      if (!this.config.chalert) this.config.chalert = {};
+      this.config.chalert.soundVolume = val / 100;
+      this.notifyConfigChange();
+    });
+
+    document.getElementById('btn-save-chalert-config')?.addEventListener('click', (e) => {
+      const btn = e.currentTarget;
+      this.notifyConfigChange();
+      const oldHtml = btn.innerHTML;
+      btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:16px">check_circle</span> <span>Tersimpan & Aktif!</span>';
+      setTimeout(() => {
+        btn.innerHTML = oldHtml;
+      }, 2000);
+    });
+
+    document.getElementById('btn-copy-chalert-url')?.addEventListener('click', () => {
+      const url = `${window.location.origin}/overlay_chalert.html`;
+      navigator.clipboard?.writeText(url).then(() => {
+        this.logActivity('Link OBS Chalert disalin: ' + url, 'ok');
+      });
+    });
+
+    document.getElementById('btn-open-chalert-window')?.addEventListener('click', () => {
+      window.open('/overlay_chalert.html', '_blank', 'width=800,height=400');
+    });
+
+    // Chalert Test Simulation Buttons
+    document.getElementById('btn-test-chalert-chat')?.addEventListener('click', () => {
+      this.triggerChalertSimulation('chat');
+    });
+    document.getElementById('btn-test-chalert-follow')?.addEventListener('click', () => {
+      this.triggerChalertSimulation('follow');
+    });
+    document.getElementById('btn-test-chalert-like')?.addEventListener('click', () => {
+      this.triggerChalertSimulation('like');
+    });
+    document.getElementById('btn-test-chalert-gift')?.addEventListener('click', () => {
+      this.triggerChalertSimulation('gift');
+    });
+    document.getElementById('btn-test-chalert-big-gift')?.addEventListener('click', () => {
+      this.triggerChalertSimulation('donation');
+    });
   }
 
   updateUIFromConfig() {
@@ -1086,6 +1410,7 @@ class Application {
     if (document.getElementById('input-tiktok-token')) document.getElementById('input-tiktok-token').value = this.config.tiktokApiToken || '';
 
     if (document.getElementById('switch-tts-enable')) document.getElementById('switch-tts-enable').checked = this.config.ttsEnabled;
+    if (document.getElementById('switch-tts-overlay-only')) document.getElementById('switch-tts-overlay-only').checked = this.config.ttsOverlayOnly !== false;
     if (document.getElementById('range-tts-vol')) document.getElementById('range-tts-vol').value = this.config.ttsVolume;
     if (document.getElementById('val-tts-vol')) document.getElementById('val-tts-vol').innerText = `${Math.round(this.config.ttsVolume * 100)}%`;
 
@@ -1175,6 +1500,7 @@ class Application {
     }
 
     this.renderRunningTextSlideCards();
+    this.updateChalertUI();
   }
 
   renderRunningTextSlideCards() {
@@ -1515,13 +1841,18 @@ class Application {
     }
     this.broadcastRunningTextConfig();
 
+    if (this.dashboardChalertWidget && this.config.chalert) {
+      this.dashboardChalertWidget.applyConfig(this.config.chalert);
+    }
+    this.broadcastChalertConfig();
+
     try {
       localStorage.setItem(this.storageKey, JSON.stringify(this.config));
     } catch (e) {}
     
     // Sync to backend API for OBS Overlay access
     try {
-      fetch('http://localhost:8765/api/config', {
+      fetch(this.getConfigApiUrl(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(this.config)
@@ -1534,7 +1865,7 @@ class Application {
     
     // 1. Try to load from local backend API (solves OBS isolated localStorage issue)
     try {
-      const res = await fetch('http://localhost:8765/api/config', { cache: 'no-store' });
+      const res = await fetch(this.getConfigApiUrl(), { cache: 'no-store' });
       if (res.ok) {
         const backendConfig = await res.json();
         if (Object.keys(backendConfig).length > 0) {
@@ -1565,5 +1896,146 @@ class Application {
     if (fellBackToLocal) {
       this.notifyConfigChange();
     }
+  }
+
+  updateChalertUI() {
+    if (!this.config.chalert) return;
+    const c = this.config.chalert;
+
+    const swEn = document.getElementById('switch-chalert-enable');
+    if (swEn) swEn.checked = c.enabled !== false;
+
+    const selPos = document.getElementById('select-chalert-position');
+    if (selPos && c.position) selPos.value = c.position;
+
+    const selTheme = document.getElementById('select-chalert-theme');
+    if (selTheme && c.theme) selTheme.value = c.theme;
+
+    const swIdle = document.getElementById('switch-chalert-show-idle');
+    if (swIdle) swIdle.checked = c.showIdlePill !== false;
+
+    const inpIdle = document.getElementById('input-chalert-idle-text');
+    if (inpIdle && c.idleText) inpIdle.value = c.idleText;
+
+    const swChat = document.getElementById('switch-chalert-enable-chat');
+    if (swChat) swChat.checked = c.enableChat !== false;
+
+    const rngChatDur = document.getElementById('range-chalert-chat-duration');
+    const valChatDur = document.getElementById('val-chalert-chat-duration');
+    if (rngChatDur) rngChatDur.value = c.chatDisplayMs || 4500;
+    if (valChatDur) valChatDur.innerText = `${((c.chatDisplayMs || 4500) / 1000).toFixed(1)}s`;
+
+    const rngVol = document.getElementById('range-chalert-volume');
+    const valVol = document.getElementById('val-chalert-volume');
+    const volPercent = Math.round((typeof c.soundVolume === 'number' ? c.soundVolume : 0.8) * 100);
+    if (rngVol) rngVol.value = volPercent;
+    if (valVol) valVol.innerText = `${volPercent}%`;
+
+    if (this.dashboardChalertWidget) {
+      this.dashboardChalertWidget.applyConfig(c);
+    }
+  }
+
+  broadcastChalertEvent(payload) {
+    const eventPayload = {
+      type: 'CHALERT_EVENT',
+      payload: payload,
+      timestamp: Date.now()
+    };
+
+    if (this.chalertBroadcastChannel) {
+      try {
+        this.chalertBroadcastChannel.postMessage(eventPayload);
+      } catch (e) {}
+    }
+
+    try {
+      localStorage.setItem('zover_chalert_event', JSON.stringify(eventPayload));
+    } catch (e) {}
+
+    if (this.dashboardChalertWidget) {
+      this.dashboardChalertWidget.enqueue(payload);
+    }
+  }
+
+  broadcastChalertConfig() {
+    if (!this.config.chalert) return;
+    const payload = {
+      type: 'CHALERT_CONFIG_UPDATE',
+      config: this.config.chalert,
+      timestamp: Date.now()
+    };
+
+    if (this.chalertBroadcastChannel) {
+      try {
+        this.chalertBroadcastChannel.postMessage(payload);
+      } catch (e) {}
+    }
+
+    try {
+      localStorage.setItem('zover_chalert_config', JSON.stringify(payload));
+    } catch (e) {}
+
+    if (this.dashboardChalertWidget) {
+      this.dashboardChalertWidget.applyConfig(this.config.chalert);
+    }
+  }
+
+  triggerChalertSimulation(type) {
+    if (type === 'chat') {
+      const chatData = {
+        id: `sim_chat_${Date.now()}`,
+        platform: 'tiktok',
+        username: 'PenontonSetia',
+        message: 'Stream hari ini keren banget, semangat terus ya!',
+        avatar: 'logo_platform/tiktok.jpg'
+      };
+      this.handleIncomingChat(chatData, false);
+    } else if (type === 'gift') {
+      const alertData = {
+        id: `sim_gift_${Date.now()}`,
+        type: 'tiktok_gift',
+        platform: 'tiktok',
+        user: 'SultanGanteng',
+        gift: 'Kopi Hangat',
+        count: 5,
+        avatar: 'logo_platform/tiktok.jpg',
+        comment: 'Semangat live-nya, nih buat ngopi santai!'
+      };
+      this.handleIncomingAlert(alertData, false);
+    } else if (type === 'donation') {
+      const alertData = {
+        id: `sim_sub_${Date.now()}`,
+        type: 'kick_sub',
+        platform: 'kick',
+        user: 'Budi_Saweria',
+        gift: 'Saweria Rp 50.000',
+        count: 1,
+        avatar: 'logo_platform/kick.png',
+        comment: 'Request main ranked dong!'
+      };
+      this.handleIncomingAlert(alertData, false);
+    } else if (type === 'follow') {
+      const alertData = {
+        id: `sim_fol_${Date.now()}`,
+        type: 'tiktok_follow',
+        platform: 'tiktok',
+        user: 'Kickers_Pro',
+        avatar: 'logo_platform/tiktok.jpg'
+      };
+      this.handleIncomingAlert(alertData, false);
+    } else if (type === 'like') {
+      const alertData = {
+        id: `sim_like_${Date.now()}`,
+        type: 'tiktok_like',
+        platform: 'tiktok',
+        user: 'TapTapSquad',
+        count: 100,
+        avatar: 'logo_platform/tiktok.jpg'
+      };
+      this.handleIncomingAlert(alertData, false);
+    }
+
+    this.logActivity(`[Chalert Sim] Mengirim uji coba: ${type.toUpperCase()}`, 'info');
   }
 }

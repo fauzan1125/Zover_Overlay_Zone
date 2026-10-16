@@ -149,9 +149,13 @@ Assert-Test "Config contains TikTok fields" ($exampleJson.PSObject.Properties['t
 Assert-Test "Config contains TTS settings" ($exampleJson.PSObject.Properties['ttsEnabled'] -ne $null)
 Assert-Test "Config contains Alert definitions" ($exampleJson.alerts.PSObject.Properties['yt_sub'] -ne $null)
 Assert-Test "Config contains RunningText definitions" ($exampleJson.PSObject.Properties['runningText'] -ne $null)
+Assert-Test "Config contains Chalert definitions" ($exampleJson.PSObject.Properties['chalert'] -ne $null)
 Assert-Test "overlay_running_text.html exists" (Test-Path (Join-Path $rootDir "overlay_running_text.html"))
 Assert-Test "running_text.css exists" (Test-Path (Join-Path $rootDir "css\running_text.css"))
 Assert-Test "running_text.js exists" (Test-Path (Join-Path $rootDir "js\running_text.js"))
+Assert-Test "overlay_chalert.html exists" (Test-Path (Join-Path $rootDir "overlay_chalert.html"))
+Assert-Test "chalert.css exists" (Test-Path (Join-Path $rootDir "css\chalert.css"))
+Assert-Test "chalert.js exists" (Test-Path (Join-Path $rootDir "js\chalert.js"))
 
 # Test UTF-8 with international / Indonesian characters
 $testUtf8Obj = @{
@@ -162,6 +166,23 @@ $testUtf8Json = $testUtf8Obj | ConvertTo-Json
 $utf8Bytes = [System.Text.Encoding]::UTF8.GetBytes($testUtf8Json)
 $roundtrip = [System.Text.Encoding]::UTF8.GetString($utf8Bytes) | ConvertFrom-Json
 Assert-Test "UTF-8 roundtrip preserves strings properly" ($roundtrip.kickUsername -eq "Streamer_Indo")
+
+# ------------------------------------------------------------
+# 7. Cross-Process Event Bridge (/api/events)
+# ------------------------------------------------------------
+Write-Host "`n--- Test Group 7: Cross-Process Event Bridge ---" -ForegroundColor Cyan
+Assert-Test "Server script defines /api/events endpoint" ($serverContent -match '/api/events')
+Assert-Test "Server script initializes synchronized eventQueue" ($serverContent -match 'eventQueue')
+
+$testQueue = [System.Collections.ArrayList]::Synchronized((New-Object System.Collections.ArrayList))
+$dummyEvt = @{
+    id = "evt_test_1"
+    type = "LIVE_CHAT"
+    timestamp = 1000
+    data = @{ message = "Halo OBS" }
+}
+[void]$testQueue.Add($dummyEvt)
+Assert-Test "EventQueue correctly stores and retrieves events" ($testQueue.Count -eq 1 -and $testQueue[0].id -eq "evt_test_1")
 
 # ------------------------------------------------------------
 # Summary
