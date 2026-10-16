@@ -1,6 +1,9 @@
 # Konfigurasi runtime pribadi (username, token API, URL live)
 # Jangan di-commit. Salin config.example.json -> config.json untuk mulai.
 config.json
+.env
+.env.*
+*.local
 
 # OS / Editor / IDE
 .DS_Store
@@ -16,7 +19,14 @@ antislop.md
 
 # Mockup desain internal & kode contoh pihak ketiga
 stitch_indofinity_dark_blue_ui/
+stitch_indofinity_dark_blue_ui*/
 ws_api_example/
+
+# Dokumen internal & PRD
+update_zover_prd.txt
+*_prd.txt
+*prd*.txt
+*.prd
 
 # File uji / sampah lokal / cache browser
 test.mp3
@@ -24,6 +34,9 @@ test2.mp3
 brave_out.txt
 test_err.html
 tiktok_proxy.html
+*.tmp
+*.temp
+*.bak
 
 # Dependency (jika nanti memakai npm)
 node_modules/
