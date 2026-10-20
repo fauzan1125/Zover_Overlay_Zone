@@ -89,10 +89,15 @@ class TikFinityConnector {
     this.websocket = null;
     this.updateStatus('disconnected', message);
 
+    // Guard against reconnect loops when Native TikTok mode is active
+    if (window.tiktokNativeActive) {
+      return;
+    }
+
     if (this.shouldAutoReconnect && !this.reconnectTimer) {
       this.reconnectTimer = setTimeout(() => {
         this.reconnectTimer = null;
-        if (this.shouldAutoReconnect) {
+        if (this.shouldAutoReconnect && !window.tiktokNativeActive) {
           this.connect();
         }
       }, this.reconnectIntervalMs);

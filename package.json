@@ -1,0 +1,14 @@
+{
+  "name": "chat_yt_kick_tiktok",
+  "version": "2.4.0",
+  "description": "ZoVer Multi-Chat Overlay & TikTok Live Native Connector",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@tiktool/live": "^2.16.0",
+    "tiktok-live-connector": "^2.5.0",
+    "ws": "^8.18.0"
+  }
+}

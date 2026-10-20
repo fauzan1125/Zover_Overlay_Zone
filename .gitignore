@@ -35,6 +35,10 @@ update_zover_prd.txt
 *_prd.txt
 *prd*.txt
 *.prd
+migrasi_zover*.txt
+
+# Repositori eksperimen pihak ketiga
+TikTokLive-master/
 
 # File uji / sampah lokal / cache browser
 test.mp3

@@ -34,23 +34,23 @@ Aplikasi web ringan (vanilla JavaScript, tanpa build tool) yang berjalan **100% 
 | Komponen | Keterangan |
 |---|---|
 | OS | Windows 10/11 |
-| PowerShell | Bawaan Windows (dijalankan otomatis oleh `START_SERVER.bat`) |
+| Node.js | LTS (v18+ atau v20+). Otomatis dipasang oleh `START_SERVER.bat` jika belum ada |
 | Browser | Chrome / Edge modern (untuk dashboard & TTS) |
 | OBS Studio | Opsional, untuk menampilkan overlay |
-| IndoFinity | **Wajib hanya untuk TikTok** (aplikasi desktop pihak ketiga yang menyediakan WebSocket lokal) |
+| TikTok Bridge | **Tidak perlu lagi IndoFinity / TikFinity** (Konektor bawaan Native Direct terintegrasi) |
 
 ---
 
-## 📥 Cara Install (dari GitHub ZIP)
+## 📥 Cara Install & Menjalankan (dari GitHub)
 
-1. **Download** repository ini sebagai `.zip` lewat tombol **Code → Download ZIP**, lalu **ekstrak** ke folder mana pun.
+1. **Clone atau Download** repository ini (`git clone https://github.com/...` atau klik **Code → Download ZIP** lalu ekstrak).
 2. **Double-click `START_SERVER.bat`**.
-   - Jendela hitam akan terbuka = server lokal berjalan di `http://localhost:8765`.
-   - **Biarkan jendela ini tetap terbuka** selama live. Menutupnya = mematikan server.
+   - Skrip akan otomatis mendeteksi Node.js dan mengunduh dependensi (`npm install`) saat pertama kali dijalankan.
+   - Jendela server akan terbuka di `http://localhost:8765`.
+   - **Biarkan jendela ini tetap terbuka** selama live streaming.
 3. Buka browser, kunjungi **`http://localhost:8765`**.
-4. Isi kredensial platform pada tab **Koneksi Stream**, lalu klik **Hubungkan**.
-5. (Opsional) Untuk OBS: klik tombol **"Salin Path Overlay Chat"** dan **"Salin Path Overlay ViewCount"**, lalu tambahkan **dua Browser Source terpisah** di OBS (satu untuk chat, satu untuk bar viewcount).
- 
+4. Isi username platform pada menu **Koneksi Stream**, lalu klik **Hubungkan**.
+5. (Opsional) Untuk OBS Studio: klik tombol **"Salin Link OBS"** untuk Chatbox, ViewCount, Alert, atau Chalert, lalu tempel sebagai Browser Source di OBS.
 
 ---
 
@@ -69,11 +69,11 @@ https://www.youtube.com/watch?v=ID_PORTRAIT, https://www.youtube.com/watch?v=ID_
 - Tanpa API Key → memakai **Scraper Mode** via server lokal (wajib jalankan `START_SERVER.bat`).
 - Dengan API Key (opsional) → memakai **YouTube Data API v3**.
 
-### TikTok
-Membutuhkan aplikasi **IndoFinity** berjalan di PC yang sama.
-1. Buka aplikasi IndoFinity.
-2. Isi username TikTok dan **IndoFinity API Token** Anda di dashboard.
+### TikTok Live (Native Direct)
+1. Masukkan `@username` TikTok Anda di kolom input.
+2. Kolom Token / Session ID bersifat opsional (dapat dikosongkan).
 3. Klik **Hubungkan**.
+4. Chat, Gift, Like tap-tap per 100, Follower alert, dan Viewcount langsung terbaca secara instan tanpa membutuhkan aplikasi pihak ketiga seperti IndoFinity atau TikFinity.
 
 ---
 
@@ -107,28 +107,31 @@ Membutuhkan aplikasi **IndoFinity** berjalan di PC yang sama.
 ## 🗂️ Struktur Folder
 
 ```
-├── START_SERVER.bat        # Jalan server lokal (double-click)
-├── server.ps1              # Server lokal + proxy YouTube + API config
-├── index.html              # Dashboard kontrol (Bootstrap 5)
+├── START_SERVER.bat        # Launcher otomatis server lokal (Node.js auto-detect)
+├── server.js               # Server lokal Node.js + WebSocket TikTok Native + Scraper Proxy
+├── package.json            # Dependensi Node.js (tiktok-live-connector & ws)
+├── index.html              # Dashboard kontrol & konfigurasi (Bootstrap 5)
 ├── overlay_chat.html       # Halaman transparan OBS untuk kartu live chat
 ├── overlay_viewcount.html  # Halaman transparan OBS untuk bar viewcount (terpisah)
-├── config.example.json     # Template konfigurasi (referensi)
+├── overlay_alert.html      # Halaman transparan OBS untuk alert & soundboard
+├── overlay_chalert.html    # Halaman gabungan Chat + Alert
+├── config.example.json     # Template konfigurasi referensi
 ├── css/
 │   ├── styles.css          # Tema overlay & kartu chat
-│   └── dashboard.css       # Tema slate premium dashboard
+│   └── dashboard.css       # Tema slate dashboard
 ├── logo_platform/
-│   ├── kick.png            # Logo Kick untuk header kartu
-│   ├── youtube.png         # Logo YouTube untuk header kartu
-│   └── tiktok.jpg          # Logo TikTok untuk header kartu
+│   ├── kick.png            # Logo Kick
+│   ├── youtube.png         # Logo YouTube
+│   └── tiktok.jpg          # Logo TikTok
 └── js/
     ├── app.js              # Controller utama & sinkronisasi
-    ├── overlay.js          # Renderer overlay
+    ├── overlay.js          # Renderer overlay chat
     ├── tts.js              # Mesin TTS Mbak Google
     ├── viewcount.js        # Monitor & bar viewcount 3 platform
     └── connectors/
-        ├── kick.js         # Konektor Kick
-        ├── youtube.js      # Konektor YouTube (multi-live)
-        └── tiktok.js       # Konektor TikTok (IndoFinity)
+        ├── kick.js         # Konektor Kick (Pusher WebSocket)
+        ├── youtube.js      # Konektor YouTube (multi-live scraper & API)
+        └── tiktok.js       # Konektor TikTok (Native Direct WebSocket)
 ```
 
 ---
@@ -145,7 +148,7 @@ Membutuhkan aplikasi **IndoFinity** berjalan di PC yang sama.
 | Masalah | Solusi |
 |---|---|
 | YouTube tidak terhubung | Pastikan `START_SERVER.bat` masih terbuka (Scraper Mode butuh server lokal). |
-| TikTok tidak terhubung | Pastikan aplikasi IndoFinity berjalan dan token benar. |
+| TikTok tidak terhubung | Pastikan akun sedang LIVE di TikTok, username sesuai (tanpa spasi/@), dan server aktif via `START_SERVER.bat`. Kolom token biarkan kosong. |
 | Suara tidak keluar | Browser memblokir autoplay hingga ada 1 interaksi — klik sekali pada halaman dashboard/overlay. |
 | Overlay kosong di OBS | Pastikan path Browser Source mengarah ke `overlay_chat.html` / `overlay_viewcount.html` dari server lokal, dan server masih berjalan. |
 
