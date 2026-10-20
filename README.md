@@ -108,6 +108,7 @@ https://www.youtube.com/watch?v=ID_PORTRAIT, https://www.youtube.com/watch?v=ID_
 
 ```
 ├── START_SERVER.bat        # Launcher otomatis server lokal (Node.js auto-detect)
+├── STOP_SERVER.bat         # Tombol 1-klik untuk mematikan server lokal
 ├── server.js               # Server lokal Node.js + WebSocket TikTok Native + Scraper Proxy
 ├── package.json            # Dependensi Node.js (tiktok-live-connector & ws)
 ├── index.html              # Dashboard kontrol & konfigurasi (Bootstrap 5)
