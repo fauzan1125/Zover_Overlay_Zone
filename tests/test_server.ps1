@@ -68,8 +68,9 @@ $allowedProxyHosts = @('www.youtube.com', 'youtube.com', 'm.youtube.com', 'kick.
 
 function Test-HostAllowed($targetUrl) {
     try {
-        $hostOnly = ([System.Uri]$targetUrl).Host
-        return ($allowedProxyHosts -contains $hostOnly)
+        $uri = [System.Uri]$targetUrl
+        if ($uri.Scheme -ne "http" -and $uri.Scheme -ne "https") { return $false }
+        return ($allowedProxyHosts -contains $uri.Host)
     } catch {
         return $false
     }
@@ -82,6 +83,7 @@ Assert-Test "Block internal intranet IP (192.168.1.1)" (-not (Test-HostAllowed "
 Assert-Test "Block AWS metadata endpoint (169.254.169.254)" (-not (Test-HostAllowed "http://169.254.169.254/latest/meta-data/"))
 Assert-Test "Block arbitrary attacker domain" (-not (Test-HostAllowed "https://evil-attacker.com/steal"))
 Assert-Test "Block subdomain bypass trick (kick.com.evil.com)" (-not (Test-HostAllowed "https://kick.com.evil.com/"))
+Assert-Test "Block non-http protocol (file:///etc/passwd)" (-not (Test-HostAllowed "file:///etc/passwd"))
 
 # ------------------------------------------------------------
 # 3. Path-Traversal Boundary Check
@@ -89,6 +91,7 @@ Assert-Test "Block subdomain bypass trick (kick.com.evil.com)" (-not (Test-HostA
 Write-Host "`n--- Test Group 3: Path Traversal Security ---" -ForegroundColor Cyan
 
 function Test-PathSafety($urlPath, $baseDir) {
+    if ($urlPath.Contains("`0") -or $urlPath.Contains(':')) { return $false }
     $filePath = Join-Path $baseDir ($urlPath -replace '/', '\')
     $rootFull = ([System.IO.Path]::GetFullPath($baseDir)).TrimEnd('\')
     $fullPath = [System.IO.Path]::GetFullPath($filePath)
@@ -99,6 +102,8 @@ Assert-Test "Allow legit file in root (index.html)" (Test-PathSafety "/index.htm
 Assert-Test "Allow legit file in subfolder (css/styles.css)" (Test-PathSafety "/css/styles.css" $rootDir)
 Assert-Test "Block traversal with ../ (../../Windows/System32)" (-not (Test-PathSafety "/../../Windows/System32/calc.exe" $rootDir))
 Assert-Test "Block encoded traversal (/..%2f..%2f)" (-not (Test-PathSafety "/../config.json" $rootDir))
+Assert-Test "Block null byte injection (/index.html`0.png)" (-not (Test-PathSafety "/index.html`0.png" $rootDir))
+Assert-Test "Block colon ADS stream access (/index.html:stream)" (-not (Test-PathSafety "/index.html:stream" $rootDir))
 
 # ------------------------------------------------------------
 # 4. Local Origin (CSRF) Guard

@@ -3,6 +3,13 @@
  * Manages alert queues, custom MP4/GIF video rendering, audio soundboards, and cross-window sync.
  */
 
+function getLocalServerBase() {
+  if (typeof window !== 'undefined' && window.location && window.location.origin && window.location.origin !== 'null' && !window.location.origin.startsWith('file:')) {
+    return window.location.origin;
+  }
+  return 'http://localhost:8765';
+}
+
 class AlertOverlayManager {
   constructor() {
     this.container = document.getElementById('alert-container');
@@ -66,7 +73,7 @@ class AlertOverlayManager {
   async loadConfig() {
     try {
       // 1. Ambil dari server lokal
-      const res = await fetch('http://localhost:8765/api/config', { cache: 'no-store' });
+      const res = await fetch(`${getLocalServerBase()}/api/config`, { cache: 'no-store' });
       if (res.ok) {
         const remoteCfg = await res.json();
         this.mergeConfig(remoteCfg);
@@ -130,6 +137,35 @@ class AlertOverlayManager {
 
     // 3. Polling config tiap 5 detik untuk update realtime dari dashboard
     setInterval(() => this.loadConfig(), 5000);
+
+    // 4. Server Event Bridge polling for OBS Studio CEF
+    this.startServerEventsPolling();
+  }
+
+  startServerEventsPolling() {
+    if (this.isEventsPollingActive || typeof window === 'undefined') return;
+    this.isEventsPollingActive = true;
+    let lastEventTimestamp = Date.now() - 2000;
+    const eventsUrl = `${getLocalServerBase()}/api/events`;
+
+    setInterval(async () => {
+      try {
+        const res = await fetch(`${eventsUrl}?since=${lastEventTimestamp}`, { cache: 'no-store' });
+        if (res.ok) {
+          const events = await res.json();
+          if (Array.isArray(events) && events.length > 0) {
+            for (const evt of events) {
+              if (evt.timestamp > lastEventTimestamp) {
+                lastEventTimestamp = evt.timestamp;
+              }
+              if (evt.type === 'ALERT_TRIGGER' && evt.data) {
+                this.handleIncomingBroadcast(evt);
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    }, 400);
   }
 
   handleIncomingBroadcast(payload) {

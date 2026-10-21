@@ -1,46 +1,50 @@
-# Konfigurasi runtime pribadi (username, token API, URL live)
-# Jangan di-commit. Salin config.example.json -> config.json untuk mulai.
+# Runtime user configuration containing credentials and private stream URLs
 config.json
+config.json.bak
 .env
 .env.*
 *.local
 
-# OS / Editor / IDE
+# Operating system and desktop metadata files
 .DS_Store
 Thumbs.db
 ehthumbs.db
 desktop.ini
+
+# Package manager and server debug logs
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Code editor and IDE workspace caches
 .vscode/
 .idea/
+.cursor/
 *.sublime-project
 *.sublime-workspace
 
-# AI guidelines & internal skills (khusus editor lokal)
+# Local AI configuration and private instruction guidelines
 .agents/
 AGENTS.md
 anti-slop-main/
 antislop.md
+.gemini/
 
-# Mockup desain internal & kode contoh pihak ketiga
+# Reference design bundles and upstream prototypes
 stitch_indofinity_dark_blue_ui/
 stitch_indofinity_dark_blue_ui*/
 ws_api_example/
+TikTokLive-master/
 
-# Dokumen internal & PRD
+# Internal migration notes and planning documents
 update_zover_prd.txt
 *_prd.txt
 *prd*.txt
 *.prd
 migrasi_zover*.txt
 
-# Repositori eksperimen pihak ketiga
-TikTokLive-master/
-
-# File uji / sampah lokal / cache browser
+# Transient scratch audio and local test dumps
 test.mp3
 test2.mp3
 test_*.mp3
@@ -50,14 +54,17 @@ tiktok_proxy.html
 *.tmp
 *.temp
 *.bak
+*.orig
 *~
 
-# File upload media pengguna / kustom (WhatsApp, custom alerts)
+# Dynamic user uploads and temporary test payloads
+media/alerts/media_*.bin
+media/alerts/media_*
+media/alerts/upload_*
+media/alerts/custom_*
 media/alerts/whatsapp*
 media/alerts/*removebg*
-media/alerts/custom_*
-media/alerts/upload_*
 
-# Dependency (jika nanti memakai npm)
+# Third-party runtime dependencies and lockfiles
 node_modules/
 package-lock.json

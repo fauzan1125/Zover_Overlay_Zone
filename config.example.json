@@ -4,6 +4,7 @@
   "ytApiKey": "",
   "tiktokUsername": "",
   "tiktokApiToken": "",
+  "tikfinityEnabled": false,
   "ttsEnabled": true,
   "ttsOverlayOnly": true,
   "ttsVolume": 1,
@@ -131,7 +132,6 @@
     "idleText": "@lazuri1125",
     "enableChat": true,
     "chatDisplayMs": 4500,
-    "chatCooldownMs": 1000,
     "maxQueueSize": 50,
     "soundVolume": 0.8,
     "rules": {

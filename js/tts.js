@@ -19,6 +19,8 @@ class MbakGoogleTTS {
     this.queue = [];
     this.isPlaying = false;
     this.currentAudio = null;
+    this.recentSpeechFps = new Map();
+    this.instanceId = `tts_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
     // Web Speech API
     this.synth = typeof window !== 'undefined' ? window.speechSynthesis : null;
@@ -72,9 +74,19 @@ class MbakGoogleTTS {
       this.enabled = settings.enabled;
       if (!this.enabled) this.stop();
     }
-    if (settings.volume !== undefined) this.volume = parseFloat(settings.volume) || 1.0;
-    if (settings.rate !== undefined) this.rate = parseFloat(settings.rate) || 1.0;
-    if (settings.pitch !== undefined) this.pitch = parseFloat(settings.pitch) || 1.0;
+    // volume 0 itu valid (senyap); `|| 1.0` diam-diam meresetnya jadi full
+    if (settings.volume !== undefined) {
+      const v = parseFloat(settings.volume);
+      if (Number.isFinite(v)) this.volume = v;
+    }
+    if (settings.rate !== undefined) {
+      const r = parseFloat(settings.rate);
+      if (Number.isFinite(r)) this.rate = r;
+    }
+    if (settings.pitch !== undefined) {
+      const p = parseFloat(settings.pitch);
+      if (Number.isFinite(p)) this.pitch = p;
+    }
     if (settings.gender !== undefined && settings.gender !== this.gender) {
       this.gender = settings.gender;
       if (this._reselectVoice) this._reselectVoice();
@@ -90,7 +102,8 @@ class MbakGoogleTTS {
   }
 
   speakMessage(chatData) {
-    if (!this.enabled || !chatData || !chatData.message) return;
+    // isHistory dicek di mesin, bukan hanya di app.js, agar semua konsumen ikut kebal backlog
+    if (!this.enabled || !chatData || !chatData.message || chatData.isHistory) return;
 
     const platform = (chatData.platform || 'youtube').toLowerCase();
     if (this.platforms[platform] === false) return;
@@ -105,19 +118,30 @@ class MbakGoogleTTS {
     msg = this.sanitizeForSpeech(msg);
     if (!msg) return;
 
-    // Cross-Scene / Cross-Source Audio Mutex: prevents double TTS when user has multiple scenes active in OBS
+    // Cross-Scene / Cross-Source Audio Mutex: prevents duplicate processing across open OBS scenes / windows
     const rawUser = chatData.username || chatData.user || 'Viewer';
-    const lockKey = `zover_tts_lock_${chatData.id || (platform + '_' + rawUser + '_' + msg)}`;
+
+    // Dedup by content: pesan sama yang masuk lewat dua jalur bisa membawa ID berbeda,
+    // jadi kunci per-ID saja tidak cukup
+    const fp = `${platform}|${String(rawUser).toLowerCase()}|${msg.toLowerCase()}`;
+    const now = Date.now();
+    const lastFp = this.recentSpeechFps.get(fp) || 0;
+    if (now - lastFp < 8000) return;
+    this.recentSpeechFps.set(fp, now);
+    if (this.recentSpeechFps.size > 200) {
+      this.recentSpeechFps = new Map(Array.from(this.recentSpeechFps.entries()).slice(-100));
+    }
+
+    const lockKey = `zover_tts_lock_${chatData.id || (platform + '_' + rawUser + '_' + msg.slice(0, 50))}`;
     try {
       const existingLock = localStorage.getItem(lockKey);
-      const now = Date.now();
-      if (existingLock && (now - parseInt(existingLock, 10)) < 4000) {
-        return; // Another OBS scene is already speaking this message
+      if (existingLock && (now - parseInt(existingLock, 10)) < 25000) {
+        return; // Already claimed or spoken by another window/scene
       }
       localStorage.setItem(lockKey, String(now));
       setTimeout(() => {
         try { localStorage.removeItem(lockKey); } catch (_) {}
-      }, 6000);
+      }, 30000);
     } catch (_) {}
 
     // Support multiple placeholder occurrences across template
@@ -130,6 +154,10 @@ class MbakGoogleTTS {
     text = text.replace(/(?:https?|ftp):\/\/[\n\S]+/g, 'sebuah tautan');
 
     this.queue.push(text);
+    // suara tidak boleh tertinggal jauh dari live: buang antrean tertua bila membanjir
+    while (this.queue.length > 8) {
+      this.queue.shift();
+    }
     this.playNext();
   }
 
@@ -168,11 +196,46 @@ class MbakGoogleTTS {
     return t;
   }
 
+  clearActiveSession() {
+    try {
+      const activeLockKey = 'zover_tts_active_session';
+      const rawActive = localStorage.getItem(activeLockKey);
+      if (rawActive) {
+        const active = JSON.parse(rawActive);
+        if (active && active.instanceId === this.instanceId) {
+          localStorage.removeItem(activeLockKey);
+        }
+      }
+    } catch (_) {}
+  }
+
   playNext() {
     if (this.isPlaying || this.queue.length === 0) return;
 
+    // Global Active Session Guard: jika ada window/scene lain yang sedang berbicara, antrean kita harus menunggu
+    const activeLockKey = 'zover_tts_active_session';
+    try {
+      const rawActive = localStorage.getItem(activeLockKey);
+      if (rawActive) {
+        const active = JSON.parse(rawActive);
+        if (active && active.instanceId !== this.instanceId && (Date.now() - active.startedAt) < 20000) {
+          // Window lain sedang aktif memutar suara. Tunda dan periksa kembali secara tertib.
+          setTimeout(() => this.playNext(), 350);
+          return;
+        }
+      }
+    } catch (_) {}
+
     this.isPlaying = true;
     const text = this.queue.shift();
+
+    // Tandai sesi suara global aktif agar browser source lain hening
+    try {
+      localStorage.setItem(activeLockKey, JSON.stringify({
+        instanceId: this.instanceId,
+        startedAt: Date.now()
+      }));
+    } catch (_) {}
 
     // Prioritas 1: Jika browser punya voice asli sesuai gender (Chrome / Edge modern)
     if (this.synth && this.selectedVoice) {
@@ -186,7 +249,13 @@ class MbakGoogleTTS {
 
   speakWithSpeechSynthesis(text) {
     try {
-      if (this.synth.speaking) this.synth.cancel();
+      // jangan biarkan audio Google fallback dari antrean sebelumnya menumpangi utterance ini
+      if (this.currentAudio) {
+        this.currentAudio.pause();
+        this.currentAudio.onended = null;
+        this.currentAudio.onerror = null;
+        this.currentAudio = null;
+      }
 
       const utterance = new SpeechSynthesisUtterance(text);
       this.currentUtterance = utterance; // Retain reference to prevent Chromium GC freeze bug
@@ -196,58 +265,109 @@ class MbakGoogleTTS {
       utterance.rate = Math.min(Math.max(this.rate, 0.5), 2);
       utterance.pitch = Math.min(Math.max(this.pitch, 0.5), 1.5);
 
-      if (this.speechWatchdog) clearTimeout(this.speechWatchdog);
+      if (this.speechWatchdog) {
+        clearTimeout(this.speechWatchdog);
+        this.speechWatchdog = null;
+      }
 
+      let hasFinished = false;
       const finish = () => {
+        if (hasFinished) return;
+        hasFinished = true;
         if (this.speechWatchdog) {
           clearTimeout(this.speechWatchdog);
           this.speechWatchdog = null;
         }
         this.currentUtterance = null;
+        this.clearActiveSession();
         this.isPlaying = false;
-        setTimeout(() => this.playNext(), 250);
+        // Jeda natural 350ms sebelum memutar komentar antrean berikutnya
+        setTimeout(() => this.playNext(), 350);
       };
 
       utterance.onend = finish;
       utterance.onerror = (err) => {
-        console.warn("[TTS] WebSpeech error, mencoba Online Audio fallback:", err);
+        if (hasFinished) return;
         if (this.speechWatchdog) {
           clearTimeout(this.speechWatchdog);
           this.speechWatchdog = null;
         }
         this.currentUtterance = null;
+
+        // Jika dibatalkan atau terinterupsi secara sengaja, jangan fallback ke Google Audio
+        if (err && (err.error === 'canceled' || err.error === 'interrupted')) {
+          this.clearActiveSession();
+          this.isPlaying = false;
+          hasFinished = true;
+          return;
+        }
+
+        console.warn("[TTS] WebSpeech error, mencoba Online Audio fallback:", err);
+        hasFinished = true;
+        try { if (this.synth) this.synth.cancel(); } catch (_) {}
         this.speakWithOnlineAudio(text);
       };
 
-      // Watchdog timeout: unfreeze if browser speech thread hangs
-      const maxDurationMs = Math.max(12000, text.length * 350);
-      this.speechWatchdog = setTimeout(() => {
-        if (this.isPlaying && this.currentUtterance === utterance) {
+      // Watchdog anti-hang, tapi cek dulu: CEF sering tidak fire onend padahal ucapan masih jalan,
+      // dan finish prematur membuat komentar berikutnya menimpa suara yang sedang berbunyi
+      const armWatchdog = (delay, retries) => {
+        this.speechWatchdog = setTimeout(() => {
+          if (hasFinished || this.currentUtterance !== utterance) return;
+          if (this.synth && this.synth.speaking && retries < 5) {
+            armWatchdog(Math.max(4000, text.length * 100), retries + 1);
+            return;
+          }
           console.warn("[TTS] SpeechSynthesis watchdog triggered (force finish).");
           finish();
-        }
-      }, maxDurationMs);
+        }, delay);
+      };
+      armWatchdog(Math.max(12000, text.length * 350), 0);
 
       this.synth.speak(utterance);
     } catch (e) {
       this.currentUtterance = null;
+      try { if (this.synth) this.synth.cancel(); } catch (_) {}
       this.speakWithOnlineAudio(text);
     }
   }
 
   speakWithOnlineAudio(text) {
+    this.isPlaying = true;
     const cleanText = text.substring(0, 180);
     const url = `https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=id&q=${encodeURIComponent(cleanText)}`;
 
+    let hasFinished = false;
+    let watchdog = null;
+
     const finish = () => {
+      if (hasFinished) return;
+      hasFinished = true;
+      if (watchdog) {
+        clearTimeout(watchdog);
+        watchdog = null;
+      }
+      if (this.currentAudio) {
+        this.currentAudio.onended = null;
+        this.currentAudio.onerror = null;
+        this.currentAudio = null;
+      }
+      this.clearActiveSession();
       this.isPlaying = false;
-      this.currentAudio = null;
-      setTimeout(() => this.playNext(), 250);
+      // Jeda natural 350ms sebelum memutar komentar antrean berikutnya
+      setTimeout(() => this.playNext(), 350);
     };
 
     try {
+      // WebSpeech yang masih berbunyi harus berhenti dulu; kalau tidak,
+      // audio ini menumpangi teks yang sama = suara dobel
+      if (this.synth && this.synth.speaking) {
+        try { this.synth.cancel(); } catch (_) {}
+      }
+
       if (this.currentAudio) {
         this.currentAudio.pause();
+        this.currentAudio.onended = null;
+        this.currentAudio.onerror = null;
         this.currentAudio = null;
       }
 
@@ -260,6 +380,22 @@ class MbakGoogleTTS {
         console.warn("[TTS] Google Audio Error:", e);
         finish();
       };
+
+      // Watchdog mengikuti panjang teks; 15s fixed memotong audio panjang di tengah kalimat.
+      // Perpanjangan dibatasi 3x agar audio yang stall (paused=false tapi macet) tidak menggantung selamanya
+      const estMs = Math.max(15000, cleanText.length * 250);
+      const armAudioWatchdog = (retries) => {
+        watchdog = setTimeout(() => {
+          if (hasFinished) return;
+          if (this.currentAudio && !this.currentAudio.paused && !this.currentAudio.ended && retries < 3) {
+            armAudioWatchdog(retries + 1);
+            return;
+          }
+          console.warn("[TTS] Google Audio watchdog triggered.");
+          finish();
+        }, estMs);
+      };
+      armAudioWatchdog(0);
 
       const playPromise = this.currentAudio.play();
       if (playPromise !== undefined) {
@@ -277,15 +413,20 @@ class MbakGoogleTTS {
   stop() {
     this.queue = [];
     this.isPlaying = false;
+    this.clearActiveSession();
     if (this.speechWatchdog) {
       clearTimeout(this.speechWatchdog);
       this.speechWatchdog = null;
     }
     this.currentUtterance = null;
-    if (this.synth) this.synth.cancel();
     if (this.currentAudio) {
       this.currentAudio.pause();
+      this.currentAudio.onended = null;
+      this.currentAudio.onerror = null;
       this.currentAudio = null;
+    }
+    if (this.synth) {
+      try { this.synth.cancel(); } catch (_) {}
     }
   }
 }

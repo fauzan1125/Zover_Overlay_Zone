@@ -89,15 +89,10 @@ class TikFinityConnector {
     this.websocket = null;
     this.updateStatus('disconnected', message);
 
-    // Guard against reconnect loops when Native TikTok mode is active
-    if (window.tiktokNativeActive) {
-      return;
-    }
-
     if (this.shouldAutoReconnect && !this.reconnectTimer) {
       this.reconnectTimer = setTimeout(() => {
         this.reconnectTimer = null;
-        if (this.shouldAutoReconnect && !window.tiktokNativeActive) {
+        if (this.shouldAutoReconnect) {
           this.connect();
         }
       }, this.reconnectIntervalMs);
@@ -142,25 +137,26 @@ class TikFinityConnector {
       (eventName.includes('follow') && !eventName.includes('unfollow'));
 
     if (isFollow) {
-      const username = data.nickname || data.uniqueId || data.username || 'Follower Baru';
-      const avatar = data.profilePictureUrl || data.avatarUrl || data.avatar || '';
-      const followKey = (data.uniqueId || username).toLowerCase();
+      const username = data.nickname || data.uniqueId || data.username || data.user?.nickname || data.user?.uniqueId || data.user?.displayId || 'Follower Baru';
+      const avatar = data.profilePictureUrl || data.avatarUrl || data.avatar || data.user?.profilePictureUrl || data.user?.avatar || '';
+      const followKey = (data.uniqueId || data.user?.uniqueId || username).toLowerCase();
 
       const now = Date.now();
       const lastFollow = this.recentFollowers.get(followKey) || 0;
-      if (now - lastFollow < 6000) {
-        return;
-      }
-      this.recentFollowers.set(followKey, now);
-      setTimeout(() => this.recentFollowers.delete(followKey), 15000);
+      // follow duplikat: lewati alertnya saja, jangan seluruh packet
+      // (viewer count dan like bisa ikut terbawa di packet yang sama)
+      if (now - lastFollow >= 6000) {
+        this.recentFollowers.set(followKey, now);
+        setTimeout(() => this.recentFollowers.delete(followKey), 15000);
 
-      if (this.onAlert) {
-        this.onAlert({
-          type: 'tiktok_follow',
-          platform: 'tiktok',
-          user: username,
-          avatar
-        });
+        if (this.onAlert) {
+          this.onAlert({
+            type: 'tiktok_follow',
+            platform: 'tiktok',
+            user: username,
+            avatar
+          });
+        }
       }
     }
 
@@ -170,7 +166,8 @@ class TikFinityConnector {
       data.user_count ??
       data.viewers ??
       data.roomUserCount ??
-      (eventName === 'roomuser' || eventName === 'viewcount' ? data.count : undefined);
+      data.room_user_count ??
+      (eventName === 'roomuser' || eventName === 'viewcount' ? (data.count ?? data.viewerCount) : undefined);
 
     if (rawCount !== undefined && rawCount !== null) {
       const count = parseInt(rawCount, 10);
@@ -186,9 +183,9 @@ class TikFinityConnector {
       (eventName.includes('like') && !eventName.includes('unlike'));
 
     if (isLike) {
-      const username = data.nickname || data.uniqueId || data.username || 'Penonton';
-      const userKey = String(data.uniqueId || username).trim().toLowerCase();
-      const avatar = data.profilePictureUrl || data.avatarUrl || data.avatar || '';
+      const username = data.nickname || data.uniqueId || data.username || data.user?.nickname || data.user?.uniqueId || 'Penonton';
+      const userKey = String(data.uniqueId || data.user?.uniqueId || username).trim().toLowerCase();
+      const avatar = data.profilePictureUrl || data.avatarUrl || data.avatar || data.user?.profilePictureUrl || data.user?.avatar || '';
       const addedLikes = parseInt(data.likeCount, 10) || 1;
 
       let userRecord = this.userLikes.get(userKey);

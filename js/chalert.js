@@ -303,7 +303,7 @@
 
       // If a Major Alert is currently active on the island, store as pending
       if (this.currentAlert) {
-        this.pendingChat = chatData;
+        this.pendingChat = { chatData, skipTTS };
         return;
       }
 
@@ -470,6 +470,9 @@
         // Prevent duplicate alerts from entering the queue
         const isQueued = this.alertQueue.some(item => (item.id && item.id === alertId) || item.fp === fp);
         if (!isQueued) {
+          const maxQueue = parseInt(this.options.maxQueueSize, 10) || 50;
+          // tanpa batas, banjir alert membuat antrean membesar dan diputar telat semua
+          if (this.alertQueue.length >= maxQueue) return;
           this.alertQueue.push(alertItem);
         }
         return;
@@ -581,7 +584,9 @@
         if (this.alertQueue.length > 0) {
           this.playAlert(this.alertQueue.shift());
         } else if (this.pendingChat) {
-          const chat = this.pendingChat;
+          const pending = this.pendingChat.chatData ? this.pendingChat : { chatData: this.pendingChat, skipTTS: false };
+          const chat = pending.chatData;
+          const shouldSkipTTS = Boolean(pending.skipTTS);
           this.pendingChat = null;
           this.renderChatCard({
             platform: (chat.platform || 'tiktok').toLowerCase(),
@@ -589,7 +594,7 @@
             message: chat.message || chat.text || '',
             avatar: this.sanitizeUrl(chat.avatar || chat.userAvatar)
           });
-          if (this.options.ttsEnabled !== false && this.tts) {
+          if (!shouldSkipTTS && this.options.ttsEnabled !== false && this.tts) {
             this.tts.speakMessage(chat);
           }
         } else {

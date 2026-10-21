@@ -3,6 +3,13 @@
  * Memantau jumlah penonton live Kick, YouTube, dan TikTok via proxy lokal.
  */
 
+function getLocalServerBase() {
+  if (typeof window !== 'undefined' && window.location && window.location.origin && window.location.origin !== 'null' && !window.location.origin.startsWith('file:')) {
+    return window.location.origin;
+  }
+  return 'http://localhost:8765';
+}
+
 class ViewCountMonitor {
   constructor() {
     this.enabled = true;
@@ -11,15 +18,15 @@ class ViewCountMonitor {
     this.sources = { kickUsername: '', ytVideoInput: '', tiktokUsername: '' };
     this.counts = { kick: 0, youtube: 0, tiktok: 0 };
 
-    this.proxyBase = 'http://localhost:8765/proxy';
+    this.proxyBase = `${getLocalServerBase()}/proxy`;
     this.labels = { tiktok: 'TikTok', youtube: 'YouTube', kick: 'Kick' };
     // Urutan tampilan bar sesuai desain: TikTok, YouTube, Kick
     this.order = ['tiktok', 'youtube', 'kick'];
 
     this.timer = null;
     this.lastPoll = 0;
-    this.tikfinityCount = null;
-    this.lastTikfinityUpdate = 0;
+    this.liveCount = null;
+    this.lastLiveUpdate = 0;
     this.vcBroadcastChannel = null;
     this.vcStorageKey = 'chat_overlay_viewcount_sync';
 
@@ -34,8 +41,8 @@ class ViewCountMonitor {
       this.vcBroadcastChannel = new BroadcastChannel('zover_viewcount_channel');
       this.vcBroadcastChannel.onmessage = (event) => {
         if (event.data && typeof event.data.tiktok === 'number') {
-          this.tikfinityCount = event.data.tiktok;
-          this.lastTikfinityUpdate = Date.now();
+          this.liveCount = event.data.tiktok;
+          this.lastLiveUpdate = Date.now();
           this.counts.tiktok = event.data.tiktok;
           this.render();
         }
@@ -47,8 +54,8 @@ class ViewCountMonitor {
         try {
           const payload = JSON.parse(e.newValue);
           if (typeof payload.tiktok === 'number') {
-            this.tikfinityCount = payload.tiktok;
-            this.lastTikfinityUpdate = Date.now();
+            this.liveCount = payload.tiktok;
+            this.lastLiveUpdate = Date.now();
             this.counts.tiktok = payload.tiktok;
             this.render();
           }
@@ -59,8 +66,8 @@ class ViewCountMonitor {
 
   setTikTokCount(count) {
     if (typeof count !== 'number' || isNaN(count)) return;
-    this.tikfinityCount = count;
-    this.lastTikfinityUpdate = Date.now();
+    this.liveCount = count;
+    this.lastLiveUpdate = Date.now();
     this.counts.tiktok = count;
     this.render();
 
@@ -102,7 +109,7 @@ class ViewCountMonitor {
   attachConfigPolling(intervalMs = 5000) {
     const load = async () => {
       try {
-        const res = await fetch('http://localhost:8765/api/config', { cache: 'no-store' });
+        const res = await fetch(`${getLocalServerBase()}/api/config`, { cache: 'no-store' });
         if (!res.ok) return;
         const cfg = await res.json();
         this.updateConfig({
@@ -117,6 +124,25 @@ class ViewCountMonitor {
     };
     load();
     setInterval(load, intervalMs);
+
+    // Cross-process event bridge listener for OBS CEF
+    let lastEventTimestamp = Date.now() - 2000;
+    setInterval(async () => {
+      try {
+        const res = await fetch(`${getLocalServerBase()}/api/events?since=${lastEventTimestamp}`, { cache: 'no-store' });
+        if (res.ok) {
+          const events = await res.json();
+          if (Array.isArray(events) && events.length > 0) {
+            for (const evt of events) {
+              if (evt.timestamp > lastEventTimestamp) lastEventTimestamp = evt.timestamp;
+              if (evt.type === 'VIEWCOUNT_UPDATE' && evt.data && typeof evt.data.tiktok === 'number') {
+                this.setTikTokCount(evt.data.tiktok);
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    }, 500);
   }
 
   async poll() {
@@ -155,7 +181,9 @@ class ViewCountMonitor {
     if (!text) return null;
     for (const p of patterns) {
       const m = text.match(p);
-      if (m && m[1] != null) return parseInt(m[1], 10);
+      if (!m || m[1] == null) continue;
+      const n = parseInt(String(m[1]).replace(/[^\d]/g, ''), 10);
+      if (!isNaN(n)) return n;
     }
     return null;
   }
@@ -188,7 +216,13 @@ class ViewCountMonitor {
       const html = await this.proxyGet(`https://www.youtube.com/watch?v=${id}`);
       if (html) {
         anySuccess = true;
-        const v = this.extractNumber(html, [/"viewCount"\s*:\s*"(\d+)"/, /"viewCount"\s*:\s*(\d+)/]);
+        // "watching"/"penonton" = penonton concurrent live; pola viewCount polos
+        // adalah total views seumur hidup video, jadi dicoba belakangan
+        const v = this.extractNumber(html, [
+          /"viewCount"\s*:\s*\{\s*"simpleText"\s*:\s*"([\d.,\s]+)\s(?:watching|penonton)"/,
+          /"viewCount"\s*:\s*"(\d+)"/,
+          /"viewCount"\s*:\s*(\d+)/
+        ]);
         if (v != null) { total += v; }
       }
     }
@@ -196,15 +230,11 @@ class ViewCountMonitor {
   }
 
   async fetchTikTok() {
-    if (this.tikfinityCount != null && (Date.now() - this.lastTikfinityUpdate < 90000)) {
-      return this.tikfinityCount;
+    // TikTok web /live page blocks raw proxy scraping; preserve WebSocket roomUser count
+    if (this.liveCount != null) {
+      return this.liveCount;
     }
-    const u = String(this.sources.tiktokUsername || '').trim().replace(/^@/, '').toLowerCase();
-    if (!u) return null;
-    const html = await this.proxyGet(`https://www.tiktok.com/@${u}/live`);
-    if (!html) return null;
-    const count = this.extractNumber(html, [/"user_count"\s*:\s*(\d+)/, /"viewerCount"\s*:\s*(\d+)/]);
-    return count != null ? count : 0;
+    return null;
   }
 
   parseYtIds(input) {

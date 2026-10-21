@@ -20,8 +20,17 @@ class TikTokConnector {
     this.accumulatedLikes = 0;
     this.lastLikeMilestone = 0;
     this.lastLikeAlertTime = 0;
+    this.milestoneStep = 100;
     this.recentGifts = new Map();
     this.recentFollowers = new Map();
+    this.seenFollowers = new Set();
+  }
+
+  setMilestoneStep(step) {
+    const val = parseInt(step, 10);
+    if (!isNaN(val) && val > 0) {
+      this.milestoneStep = val;
+    }
   }
 
   async connect(username, customToken = '') {
@@ -125,6 +134,9 @@ class TikTokConnector {
           } else if (this.isConnected) {
             this.isConnected = false;
             this.updateStatus('disconnected', 'Koneksi TikTok terputus. Mencoba reconnect...');
+            if (typeof this.onViewCount === 'function') {
+              this.onViewCount(0);
+            }
             this.scheduleReconnect();
           }
         };
@@ -155,6 +167,9 @@ class TikTokConnector {
           this.updateStatus('connected', `Terhubung (@${this.username})`);
         } else if (payload.status === 'disconnected') {
           this.updateStatus('disconnected', 'TikTok Live stream berakhir atau terputus');
+          if (typeof this.onViewCount === 'function') {
+            this.onViewCount(0);
+          }
         }
         break;
 
@@ -258,7 +273,7 @@ class TikTokConnector {
     const addedLikes = Number(data.likeCount) || 1;
     this.accumulatedLikes += addedLikes;
 
-    const step = 100;
+    const step = this.milestoneStep || 100;
     const currentMilestone = Math.floor(this.accumulatedLikes / step) * step;
     const now = Date.now();
 
@@ -285,21 +300,21 @@ class TikTokConnector {
   processFollowEvent(data) {
     if (!data) return;
 
+    const uniqueId = String(data.uniqueId || '').trim();
     const user = data.nickname || data.uniqueId || 'Follower Baru';
-    const followKey = String(data.uniqueId || user).toLowerCase();
-    const now = Date.now();
+    const followKey = (uniqueId || user).toLowerCase();
 
-    const lastFollow = this.recentFollowers.get(followKey) || 0;
-    if (now - lastFollow < 6000) return;
-    this.recentFollowers.set(followKey, now);
-    setTimeout(() => this.recentFollowers.delete(followKey), 15000);
+    if (this.seenFollowers.has(followKey)) return;
+    this.seenFollowers.add(followKey);
+
+    const avatar = data.profilePictureUrl || 'https://www.tiktok.com/favicon.ico';
 
     if (this.onAlert) {
       this.onAlert({
         type: 'tiktok_follow',
         platform: 'tiktok',
         user,
-        avatar: data.profilePictureUrl || 'https://www.tiktok.com/favicon.ico'
+        avatar
       });
     }
   }
@@ -414,6 +429,13 @@ class TikTokConnector {
         profilePictureUrl: data.profilePictureUrl || data.avatar,
         giftPictureUrl: data.giftPictureUrl || data.giftIcon
       });
+    } else if (name.includes('follow')) {
+      this.processFollowEvent(data);
+    } else if (name.includes('roomuser') || name.includes('viewers') || name.includes('viewcount')) {
+      const v = data.viewerCount ?? data.count ?? data.userCount;
+      if (v !== undefined) {
+        this.processViewerCountEvent({ viewerCount: v });
+      }
     }
   }
 
@@ -443,6 +465,10 @@ class TikTokConnector {
       } catch (_) {}
       this.websocket = null;
     }
+    if (typeof this.onViewCount === 'function') {
+      this.onViewCount(0);
+    }
+    this.seenFollowers.clear();
     this.updateStatus('disconnected', 'Terputus');
   }
 

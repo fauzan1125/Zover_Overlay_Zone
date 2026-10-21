@@ -24,12 +24,35 @@ try {
     $listener.Start()
     Write-Host "[SERVER] Listening on http://localhost:$port ..." -ForegroundColor Green
 } catch {
+    # Probe verify whether occupying process is an active ZoVer instance
+    $isZoVerActive = $false
+    try {
+        $probeReq = [System.Net.WebRequest]::Create("http://localhost:${port}/api/events?since=0")
+        $probeReq.Timeout = 2000
+        $probeRes = $probeReq.GetResponse()
+        $probeStream = $probeRes.GetResponseStream()
+        $probeReader = New-Object System.IO.StreamReader($probeStream)
+        $probeBody = $probeReader.ReadToEnd()
+        $probeReader.Close()
+        $probeRes.Close()
+        $parsedEvents = ConvertFrom-Json $probeBody -ErrorAction Stop
+        if ($parsedEvents -is [System.Array]) {
+            $isZoVerActive = $true
+        }
+    } catch {}
+
     Write-Host ""
-    Write-Host "[INFO] Server Multi-Chat Overlay SUDAH BERJALAN di latar belakang / jendela lain!" -ForegroundColor Yellow
-    Write-Host "Port $port sudah aktif melayani http://localhost:$port" -ForegroundColor Cyan
-    Write-Host "Anda tidak perlu membuka jendela server ganda. Cukup buka browser di: http://localhost:$port" -ForegroundColor Green
-    Write-Host ""
-    Write-Host "Jika ingin merestart server, tutup semua jendela server lalu jalankan kembali." -ForegroundColor Gray
+    if ($isZoVerActive) {
+        Write-Host "[INFO] Server Multi-Chat Overlay SUDAH BERJALAN di latar belakang / jendela lain!" -ForegroundColor Yellow
+        Write-Host "Port $port sudah aktif melayani http://localhost:$port" -ForegroundColor Cyan
+        Write-Host "Anda tidak perlu membuka jendela server ganda. Cukup buka browser di: http://localhost:$port" -ForegroundColor Green
+        Write-Host ""
+        Write-Host "Jika ingin merestart server, tutup semua jendela server lalu jalankan kembali." -ForegroundColor Gray
+    } else {
+        Write-Host "[PERINGATAN] Port $port sedang digunakan oleh aplikasi lain!" -ForegroundColor Red
+        Write-Host "Layanan di port $port bukan server ZoVer aktif." -ForegroundColor Yellow
+        Write-Host "Hentikan aplikasi yang memakai port $port atau jalankan STOP_SERVER.bat sebelum memulai ulang." -ForegroundColor Gray
+    }
     Read-Host "Tekan Enter untuk menutup jendela ini..."
     exit
 }
@@ -75,11 +98,26 @@ function Test-LocalOrigin($req) {
 # Hanya izinkan proxy ke host platform yang didukung (cegah SSRF / open-proxy)
 $allowedProxyHosts = @('www.youtube.com', 'youtube.com', 'm.youtube.com', 'kick.com', 'www.kick.com', 'tiktok.com', 'www.tiktok.com')
 
+# Allowed media upload extensions to prevent malicious script uploads
+$allowedUploadExts = @('.mp3', '.wav', '.ogg', '.m4a', '.aac', '.mp4', '.webm', '.mov', '.gif', '.png', '.jpg', '.jpeg', '.webp', '.bin')
+
 while ($listener.IsListening) {
     try {
         $context = $listener.GetContext()
         $request = $context.Request
         $response = $context.Response
+        # Reject unexpected host headers to protect against DNS rebinding attacks.
+        $reqHost = if ($request.Headers["Host"]) { ($request.Headers["Host"] -replace '^\s+|\s+$', '').ToLower() } else { '' }
+        $allowedHosts = @("localhost:$port", "127.0.0.1:$port", "localhost", "127.0.0.1")
+        if (-not ($allowedHosts -contains $reqHost)) {
+            $response.StatusCode = 400
+            $badHostBytes = [System.Text.Encoding]::UTF8.GetBytes("Invalid Host header")
+            $response.ContentLength64 = $badHostBytes.Length
+            $response.OutputStream.Write($badHostBytes, 0, $badHostBytes.Length)
+            $response.OutputStream.Flush()
+            $response.Close()
+            continue
+        }
 
         # Aplikasi same-origin: tidak perlu CORS lintas-origin.
         # Header CORS '*' dihapus agar situs web lain tidak bisa memanggil endpoint ini.
@@ -99,8 +137,16 @@ while ($listener.IsListening) {
             $response.ContentType = "application/json; charset=utf-8"
 
             if ($request.HttpMethod -eq "GET") {
-                if (Test-Path $configFile) {
-                    $configBytes = [System.IO.File]::ReadAllBytes($configFile)
+                # Fallback to template prevents empty widgets on freshly cloned setups
+                $targetConfigFile = $configFile
+                if (-not (Test-Path $targetConfigFile)) {
+                    $fallbackConfigFile = Join-Path $rootDir "config.example.json"
+                    if (Test-Path $fallbackConfigFile) {
+                        $targetConfigFile = $fallbackConfigFile
+                    }
+                }
+                if (Test-Path $targetConfigFile) {
+                    $configBytes = [System.IO.File]::ReadAllBytes($targetConfigFile)
                     $response.StatusCode = 200
                     $response.ContentLength64 = $configBytes.Length
                     $response.OutputStream.Write($configBytes, 0, $configBytes.Length)
@@ -122,7 +168,21 @@ while ($listener.IsListening) {
                 $reader = New-Object System.IO.StreamReader($request.InputStream, $encoding)
                 $postBody = $reader.ReadToEnd()
                 $reader.Close()
-                
+
+                # Tolak body yang bukan objek JSON agar config.json tidak rusak
+                try {
+                    $parsedConfig = ConvertFrom-Json $postBody
+                    if ($parsedConfig -isnot [System.Management.Automation.PSCustomObject]) { throw "not an object" }
+                } catch {
+                    $response.StatusCode = 400
+                    $errBytes = [System.Text.Encoding]::UTF8.GetBytes('{"error":"Invalid JSON config"}')
+                    $response.ContentLength64 = $errBytes.Length
+                    $response.OutputStream.Write($errBytes, 0, $errBytes.Length)
+                    $response.OutputStream.Flush()
+                    $response.Close()
+                    continue
+                }
+
                 [System.IO.File]::WriteAllText($configFile, $postBody, [System.Text.Encoding]::UTF8)
                 
                 $response.StatusCode = 200
@@ -148,15 +208,24 @@ while ($listener.IsListening) {
                     [long]::TryParse($request.QueryString["since"], [ref]$since) | Out-Null
                 }
 
-                $matchingEvents = @()
+                $matchingEvents = [System.Collections.Generic[List[object]]]::new()
+                $nowMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
                 $allEvents = $global:eventQueue.ToArray()
                 foreach ($evt in $allEvents) {
-                    if ($evt.timestamp -gt $since) {
-                        $matchingEvents += $evt
+                    # >= agar event dengan milidetik sama persis tidak hilang;
+                    # retensi 5 detik di POST lebih pendek dari window dedup client
+                    if ($evt.timestamp -ge $since -and ($nowMs - $evt.timestamp) -le 5000) {
+                        $matchingEvents.Add($evt) | Out-Null
                     }
                 }
 
-                $jsonOut = ConvertTo-Json -InputObject @($matchingEvents) -Compress -Depth 5
+                # ConvertTo-Json PS 5.1 meng-unwrap array berisi 1 elemen jadi objek,
+                # padahal client mengharapkan array
+                if ($matchingEvents.Count -eq 0) {
+                    $jsonOut = '[]'
+                } else {
+                    $jsonOut = '[' + (($matchingEvents | ForEach-Object { ConvertTo-Json -InputObject $_ -Compress -Depth 5 }) -join ',') + ']'
+                }
                 $outBytes = [System.Text.Encoding]::UTF8.GetBytes($jsonOut)
                 $response.StatusCode = 200
                 $response.ContentLength64 = $outBytes.Length
@@ -169,6 +238,17 @@ while ($listener.IsListening) {
                     continue
                 }
 
+                # Limit events payload to prevent unbounded memory allocation.
+                if ($request.ContentLength64 -gt 262144) {
+                    $response.StatusCode = 400
+                    $errBytes = [System.Text.Encoding]::UTF8.GetBytes('{"error":"Payload too large"}')
+                    $response.ContentLength64 = $errBytes.Length
+                    $response.OutputStream.Write($errBytes, 0, $errBytes.Length)
+                    $response.OutputStream.Flush()
+                    $response.Close()
+                    continue
+                }
+
                 $encoding = if ($request.ContentEncoding) { $request.ContentEncoding } else { [System.Text.Encoding]::UTF8 }
                 $reader = New-Object System.IO.StreamReader($request.InputStream, $encoding)
                 $body = $reader.ReadToEnd()
@@ -176,27 +256,37 @@ while ($listener.IsListening) {
 
                 try {
                     $evtObj = ConvertFrom-Json $body
-                    if (-not $evtObj.timestamp) {
-                        $evtObj | Add-Member -MemberType NoteProperty -Name "timestamp" -Value ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()) -Force
-                    }
-                    [void]$global:eventQueue.Add($evtObj)
-
-                    while ($global:eventQueue.Count -gt 100) {
-                        [void]$global:eventQueue.RemoveAt(0)
-                    }
-
-                    $response.StatusCode = 200
-                    $okBytes = [System.Text.Encoding]::UTF8.GetBytes('{"status":"ok"}')
-                    $response.ContentLength64 = $okBytes.Length
-                    $response.OutputStream.Write($okBytes, 0, $okBytes.Length)
-                    $response.OutputStream.Flush()
+                    if ($evtObj -isnot [System.Management.Automation.PSCustomObject]) { throw "not an object" }
                 } catch {
                     $response.StatusCode = 400
                     $errBytes = [System.Text.Encoding]::UTF8.GetBytes('{"error":"Invalid JSON payload"}')
                     $response.ContentLength64 = $errBytes.Length
                     $response.OutputStream.Write($errBytes, 0, $errBytes.Length)
                     $response.OutputStream.Flush()
+                    $response.Close()
+                    continue
                 }
+
+                if (-not $evtObj.timestamp) {
+                    $evtObj | Add-Member -MemberType NoteProperty -Name "timestamp" -Value ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()) -Force
+                }
+                [void]$global:eventQueue.Add($evtObj)
+
+                while ($global:eventQueue.Count -gt 100) {
+                    [void]$global:eventQueue.RemoveAt(0)
+                }
+
+                # buang event lebih tua dari 5 detik (sama seperti server.js)
+                $evictNow = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+                while ($global:eventQueue.Count -gt 0 -and ($evictNow - [long]$global:eventQueue[0].timestamp) -gt 5000) {
+                    [void]$global:eventQueue.RemoveAt(0)
+                }
+
+                $response.StatusCode = 200
+                $okBytes = [System.Text.Encoding]::UTF8.GetBytes('{"status":"ok"}')
+                $response.ContentLength64 = $okBytes.Length
+                $response.OutputStream.Write($okBytes, 0, $okBytes.Length)
+                $response.OutputStream.Flush()
             }
             $response.Close()
             continue
@@ -229,11 +319,38 @@ while ($listener.IsListening) {
                     $queryFilename = $request.Headers["X-Filename"]
                 }
 
+                # Only alert media may be uploaded; .html/.js rejected to block same-origin XSS
+                $allowedUploadExts = @('.mp3', '.wav', '.ogg', '.m4a', '.aac', '.mp4', '.webm', '.mov', '.gif', '.png', '.jpg', '.jpeg', '.webp')
+
                 if ($queryFilename) {
-                    # 1. HIGH-SPEED DIRECT BINARY STREAMING (0.1 detik, tanpa lag Base64)
-                    $cleanName = [System.IO.Path]::GetFileName([System.Uri]::UnescapeDataString($queryFilename))
+                    # Restrict upload size to 100 MB to prevent disk exhaustion attacks.
+                    if ($request.ContentLength64 -gt 104857600) {
+                        $response.StatusCode = 413
+                        $errBytes = [System.Text.Encoding]::UTF8.GetBytes('{"error":"Payload too large"}')
+                        $response.ContentLength64 = $errBytes.Length
+                        $response.OutputStream.Write($errBytes, 0, $errBytes.Length)
+                        $response.OutputStream.Flush()
+                        $response.Close()
+                        continue
+                    }
+
+                    # Safe unescape prevents failure when query parameters contain invalid percent encoding
+                    $unescaped = try { [System.Uri]::UnescapeDataString($queryFilename) } catch { $queryFilename }
+                    $cleanName = [System.IO.Path]::GetFileName($unescaped)
                     $safeName = ($cleanName -replace '[^a-zA-Z0-9_\.-]', '_').ToLower()
                     if (-not ($safeName.Trim('_.'))) { $safeName = "media_" + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() + ".bin" }
+
+                    $uploadExt = [System.IO.Path]::GetExtension($safeName).ToLower()
+                    if ($allowedUploadExts -notcontains $uploadExt) {
+                        $response.StatusCode = 400
+                        $errBytes = [System.Text.Encoding]::UTF8.GetBytes('{"error":"Format file tidak diizinkan"}')
+                        $response.ContentType = 'application/json'
+                        $response.ContentLength64 = $errBytes.Length
+                        $response.OutputStream.Write($errBytes, 0, $errBytes.Length)
+                        $response.OutputStream.Flush()
+                        $response.Close()
+                        continue
+                    }
 
                     $targetFilePath = Join-Path $mediaDir $safeName
                     $fileStream = [System.IO.File]::Create($targetFilePath)
@@ -260,6 +377,18 @@ while ($listener.IsListening) {
                     $rawName = [System.IO.Path]::GetFileName($uploadData.filename)
                     $safeName = ($rawName -replace '[^a-zA-Z0-9_\.-]', '_').ToLower()
                     if (-not ($safeName.Trim('_.'))) { $safeName = "media_" + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() + ".bin" }
+
+                    $uploadExt = [System.IO.Path]::GetExtension($safeName).ToLower()
+                    if ($allowedUploadExts -notcontains $uploadExt) {
+                        $response.StatusCode = 400
+                        $errBytes = [System.Text.Encoding]::UTF8.GetBytes('{"error":"Format file tidak diizinkan"}')
+                        $response.ContentType = 'application/json'
+                        $response.ContentLength64 = $errBytes.Length
+                        $response.OutputStream.Write($errBytes, 0, $errBytes.Length)
+                        $response.OutputStream.Flush()
+                        $response.Close()
+                        continue
+                    }
 
                     $targetFilePath = Join-Path $mediaDir $safeName
 
@@ -314,7 +443,22 @@ while ($listener.IsListening) {
 
             # SSRF guard: hanya host YouTube yang boleh di-proxy
             $hostOnly = ''
-            try { $hostOnly = ([System.Uri]$targetUrl).Host } catch { $hostOnly = '' }
+            $protoOnly = ''
+            try {
+                $uriObj = [System.Uri]$targetUrl
+                $hostOnly = $uriObj.Host
+                $protoOnly = $uriObj.Scheme
+            } catch {
+                $hostOnly = ''
+                $protoOnly = ''
+            }
+            if ($protoOnly -ne "http" -and $protoOnly -ne "https") {
+                $response.StatusCode = 400
+                $errorBytes = [System.Text.Encoding]::UTF8.GetBytes('{"error":"Invalid protocol"}')
+                $response.OutputStream.Write($errorBytes, 0, $errorBytes.Length)
+                $response.Close()
+                continue
+            }
             if ($allowedProxyHosts -notcontains $hostOnly) {
                 $response.StatusCode = 403
                 $errorBytes = [System.Text.Encoding]::UTF8.GetBytes('{"error":"Host not allowed"}')
@@ -398,6 +542,38 @@ while ($listener.IsListening) {
         $rootFull = ([System.IO.Path]::GetFullPath($rootDir)).TrimEnd('\')
         $fullPath = [System.IO.Path]::GetFullPath($filePath)
         if (-not $fullPath.StartsWith($rootFull + '\')) {
+            $response.StatusCode = 404
+            $notFoundBytes = [System.Text.Encoding]::UTF8.GetBytes("<h1>404 Not Found</h1>")
+            $response.OutputStream.Write($notFoundBytes, 0, $notFoundBytes.Length)
+            $response.Close()
+            continue
+        }
+
+        # Null byte and stream colon checks prevent path parsing errors and NTFS stream leakage
+        if ($fullPath.Contains("`0") -or ($fullPath.Substring($rootFull.Length).Contains(':'))) {
+            $response.StatusCode = 400
+            $badPathBytes = [System.Text.Encoding]::UTF8.GetBytes("Bad request path")
+            $response.OutputStream.Write($badPathBytes, 0, $badPathBytes.Length)
+            $response.Close()
+            continue
+        }
+
+        # Token config and server scripts must not be served raw through static routing.
+        $lowerUrl = $urlPath.ToLower()
+        $fileName = [System.IO.Path]::GetFileName($filePath).ToLower()
+        $fileExt = [System.IO.Path]::GetExtension($filePath).ToLower()
+        $blockedExts = @('.ps1', '.bat', '.cmd', '.key', '.pem')
+        $blockedFiles = @('config.json', 'migrasi_zover.txt', 'prd_update_zover.txt', 'update_zover_prd.txt')
+
+        if (
+            $blockedFiles -contains $fileName -or
+            $blockedExts -contains $fileExt -or
+            $lowerUrl.StartsWith('/.git/') -or
+            $lowerUrl -eq '/.git' -or
+            $lowerUrl.Contains('/node_modules/') -or
+            $fullPath.ToLower().Contains('\node_modules\') -or
+            $fullPath.ToLower().Contains('\.git\')
+        ) {
             $response.StatusCode = 404
             $notFoundBytes = [System.Text.Encoding]::UTF8.GetBytes("<h1>404 Not Found</h1>")
             $response.OutputStream.Write($notFoundBytes, 0, $notFoundBytes.Length)

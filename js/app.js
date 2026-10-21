@@ -3,30 +3,7 @@
  * Handles application state, UI bindings, and 100% reliable cross-window OBS Studio synchronization.
  */
 
-function initApp() {
-  if (window.app) return;
-  const urlParams = new URLSearchParams(window.location.search);
-  const path = window.location.pathname.toLowerCase();
-  const isChalertOverlay = path.endsWith('overlay_chalert.html') || urlParams.get('mode') === 'chalert';
-  const isChatOverlay = path.endsWith('overlay_chat.html') || urlParams.get('mode') === 'overlay';
-  const isOverlayMode = isChalertOverlay || isChatOverlay;
 
-  if (isOverlayMode) {
-    document.body.classList.add('mode-overlay');
-    if (isChalertOverlay) {
-      document.body.classList.add('mode-chalert-overlay');
-    }
-  }
-
-  // Initialize Application Instance
-  window.app = new Application(isOverlayMode, isChalertOverlay);
-}
-
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initApp);
-} else {
-  initApp();
-}
 
 class Application {
   constructor(isOverlayMode, isChalertMode = false) {
@@ -174,7 +151,6 @@ class Application {
         idleText: '@lazuri1125',
         enableChat: true,
         chatDisplayMs: 4500,
-        chatCooldownMs: 1000,
         maxQueueSize: 50,
         soundVolume: 0.8,
         rules: {
@@ -216,18 +192,22 @@ class Application {
       if (this.viewcount) {
         this.viewcount.setTikTokCount(count);
       }
+      this.broadcastEventToServer({
+        type: 'VIEWCOUNT_UPDATE',
+        data: { tiktok: count },
+        timestamp: Date.now()
+      });
     };
 
     this.kick = new KickConnector(onChatMessage, onStatusUpdate, onAlert);
     this.youtube = new YouTubeConnector(onChatMessage, onStatusUpdate, onAlert);
-    this.tiktok = new TikTokConnector(onChatMessage, onStatusUpdate, onAlert);
-    if (typeof TikFinityConnector !== 'undefined') {
-      this.tikfinity = new TikFinityConnector(onAlert, onViewCount, onStatusUpdate);
-      const step = this.config.alerts?.tiktok_like?.milestoneStep;
-      if (step && typeof this.tikfinity.setMilestoneStep === 'function') {
-        this.tikfinity.setMilestoneStep(step);
-      }
-    }
+    this.tiktok = new TikTokConnector(onChatMessage, onStatusUpdate, onAlert, onViewCount);
+    // TikFinity opsional: follow, viewers, like, gift sudah tersedia lewat bridge TikTok native.
+    // Connector hanya dibuat bila config.tikfinityEnabled = true (lihat syncTikfinity)
+    this.tikfinity = null;
+    this.tikfinityHandlers = (typeof TikFinityConnector !== 'undefined')
+      ? { onAlert, onViewCount, onStatusUpdate }
+      : null;
 
     if (this.isOverlayMode) {
       document.getElementById('dashboard-app')?.remove();
@@ -309,8 +289,9 @@ class Application {
     this.loadState().then(() => {
       this.applyTTSSettings();
       this.applyRendererConfig();
-      if (this.tikfinity && this.config.alerts?.tiktok_like?.milestoneStep) {
-        this.tikfinity.setMilestoneStep(this.config.alerts.tiktok_like.milestoneStep);
+      const likeStep = this.config.alerts?.tiktok_like?.milestoneStep;
+      if (likeStep && this.tiktok && typeof this.tiktok.setMilestoneStep === 'function') {
+        this.tiktok.setMilestoneStep(likeStep);
       }
 
       if (this.dashboardRunningTextEngine && this.config.runningText) {
@@ -328,6 +309,7 @@ class Application {
       if (!this.isOverlayMode) {
         this.updateUIFromConfig();
         this.renderRunningTextSlideCards();
+        this.syncTikfinity();
       } else {
         // If in OBS Overlay mode, poll the backend config every 5 seconds to sync settings live
         setInterval(() => this.pollOverlayConfig(), 5000);
@@ -350,10 +332,13 @@ class Application {
       if (res.ok) {
         const newConfig = await res.json();
         
-        // Detect critical changes to reconnect connectors
-        const kickChanged = newConfig.kickUsername !== this.config.kickUsername;
-        const ytChanged = newConfig.ytVideoInput !== this.config.ytVideoInput;
-        const tiktokChanged = newConfig.tiktokUsername !== this.config.tiktokUsername;
+        // Server mengirim {} bila config.json belum ada; tanpa normalisasi,
+        // undefined !== '' selalu true sehingga connector terputus tiap poll
+        const norm = (v) => (v === undefined || v === null) ? '' : String(v);
+        const kickChanged = norm(newConfig.kickUsername) !== norm(this.config.kickUsername);
+        const ytChanged = norm(newConfig.ytVideoInput) !== norm(this.config.ytVideoInput) || norm(newConfig.ytApiKey) !== norm(this.config.ytApiKey);
+        const tiktokChanged = norm(newConfig.tiktokUsername) !== norm(this.config.tiktokUsername) || norm(newConfig.tiktokApiToken) !== norm(this.config.tiktokApiToken);
+        const tfChanged = norm(newConfig.tikfinityEnabled) !== norm(this.config.tikfinityEnabled);
 
         this.config = { ...this.config, ...newConfig };
         
@@ -363,8 +348,9 @@ class Application {
         if (this.chalertWidget) {
           this.chalertWidget.applyFullConfig(this.config);
         }
-        if (this.tikfinity && this.config.alerts?.tiktok_like?.milestoneStep) {
-          this.tikfinity.setMilestoneStep(this.config.alerts.tiktok_like.milestoneStep);
+        const likeStep = this.config.alerts?.tiktok_like?.milestoneStep;
+        if (likeStep && this.tiktok && typeof this.tiktok.setMilestoneStep === 'function') {
+          this.tiktok.setMilestoneStep(likeStep);
         }
 
         // Reconnect or disconnect if credentials changed
@@ -379,11 +365,12 @@ class Application {
         if (tiktokChanged) {
           if (this.config.tiktokUsername) {
             this.tiktok.connect(this.config.tiktokUsername, this.config.tiktokApiToken);
-            if (this.tikfinity) this.tikfinity.connect();
           } else {
             this.tiktok.disconnect();
-            if (this.tikfinity) this.tikfinity.disconnect();
           }
+        }
+        if (tiktokChanged || tfChanged) {
+          this.syncTikfinity();
         }
       }
     } catch (e) {}
@@ -398,11 +385,29 @@ class Application {
     if (this.config.ytVideoInput && this.youtube) {
       this.youtube.connect(this.config.ytVideoInput, this.config.ytApiKey);
     }
-    if (this.config.tiktokUsername && this.tiktok) {
-      this.tiktok.connect(this.config.tiktokUsername, this.config.tiktokApiToken);
+    if (this.config.tiktokUsername) {
+      if (this.tiktok) this.tiktok.connect(this.config.tiktokUsername, this.config.tiktokApiToken);
+      this.syncTikfinity();
     }
-    if (this.tikfinity) {
+  }
+
+  // Follow & viewer count sudah dikirim bridge TikTok native, jadi TikFinity
+  // hanya dijalankan bila user mengaktifkan tikfinityEnabled di config
+  syncTikfinity() {
+    const want = this.config.tikfinityEnabled === true
+      && Boolean(this.tikfinityHandlers)
+      && Boolean(this.config.tiktokUsername);
+    if (want && !this.tikfinity) {
+      const { onAlert, onViewCount, onStatusUpdate } = this.tikfinityHandlers;
+      this.tikfinity = new TikFinityConnector(onAlert, onViewCount, onStatusUpdate);
+      const step = this.config.alerts?.tiktok_like?.milestoneStep;
+      if (step && typeof this.tikfinity.setMilestoneStep === 'function') {
+        this.tikfinity.setMilestoneStep(step);
+      }
       this.tikfinity.connect();
+    } else if (!want && this.tikfinity) {
+      this.tikfinity.disconnect();
+      this.tikfinity = null;
     }
   }
 
@@ -454,6 +459,8 @@ class Application {
 
     const rawUser = chatData.username || chatData.user || 'Viewer';
     const rawMsg = chatData.message || chatData.text || '';
+    // tulis balik supaya renderer/overlay tidak menampilkan teks "undefined"
+    chatData.username = rawUser;
     const timeWindow = Math.floor(Date.now() / 3000);
     const msgId = chatData.id || `${chatData.platform || 'chat'}_${rawUser}_${rawMsg}_${timeWindow}`;
     chatData.id = msgId;
@@ -468,8 +475,15 @@ class Application {
     }
 
     // 1. Render in Chalert Dynamic Island (OBS Overlay or Dashboard Preview)
+    let isChalertPending = false;
     if (this.chalertWidget) {
-      this.chalertWidget.handleIncomingChat(chatData, true);
+      if (this.chalertWidget.currentAlert) {
+        isChalertPending = true;
+        // Let chalertWidget trigger TTS when the deferred chat card is revealed
+        this.chalertWidget.handleIncomingChat(chatData, false);
+      } else {
+        this.chalertWidget.handleIncomingChat(chatData, true);
+      }
     } else if (this.dashboardChalertWidget) {
       this.dashboardChalertWidget.handleIncomingChat(chatData, true);
     }
@@ -480,8 +494,7 @@ class Application {
     }
 
     // 3. Read Comment with Mbak Google TTS
-    // Hanya bunyikan jika TTS aktif; jika ttsOverlayOnly aktif, dashboard hening saat OBS aktif (kecuali event uji coba)
-    if (this.tts && this.config.ttsEnabled !== false) {
+    if (this.tts && this.config.ttsEnabled !== false && !chatData.isHistory && !isChalertPending) {
       const shouldSpeak = this.isOverlayMode || !this.config.ttsOverlayOnly || Boolean(chatData.isTest);
       if (shouldSpeak) {
         this.tts.speakMessage(chatData);
@@ -576,7 +589,11 @@ class Application {
       localStorage.setItem(this.chalertTriggerKey, JSON.stringify(eventObj));
     } catch (_) {}
 
-    // 3. Send to Server Event Bridge for OBS CEF overlays
+    if (this.dashboardChalertWidget) {
+      this.dashboardChalertWidget.enqueue(payload);
+    }
+
+    // Send to Server Event Bridge for OBS CEF overlays
     this.broadcastEventToServer(eventObj);
   }
 
@@ -643,7 +660,7 @@ class Application {
 
     try {
       // 1. Direct Binary Streaming Upload (Instan, selesai dalam hitungan milidetik)
-      const uploadUrl = `http://localhost:8765/api/upload?filename=${encodeURIComponent(file.name)}`;
+      const uploadUrl = `${this.getConfigApiUrl().replace('/api/config', '/api/upload')}?filename=${encodeURIComponent(file.name)}`;
       const res = await fetch(uploadUrl, {
         method: 'POST',
         headers: {
@@ -738,14 +755,6 @@ class Application {
     el.scrollTop = el.scrollHeight;
   }
 
-  autoConnectOverlay() {
-    if (this.config.kickUsername) this.kick.connect(this.config.kickUsername);
-    if (this.config.ytVideoInput) this.youtube.connect(this.config.ytVideoInput, this.config.ytApiKey);
-    if (this.config.tiktokUsername) {
-      this.tiktok.connect(this.config.tiktokUsername, this.config.tiktokApiToken);
-      if (this.tikfinity) this.tikfinity.connect();
-    }
-  }
 
   setupCrossWindowSync() {
     // 1. BroadcastChannel Listener
@@ -840,9 +849,11 @@ class Application {
       if (e.key === this.storageKey && e.newValue) {
         try {
           const newConfig = JSON.parse(e.newValue);
-          const kickChanged = newConfig.kickUsername !== this.config.kickUsername;
-          const ytChanged = newConfig.ytVideoInput !== this.config.ytVideoInput;
-          const tiktokChanged = newConfig.tiktokUsername !== this.config.tiktokUsername;
+          const norm = (v) => (v === undefined || v === null) ? '' : String(v);
+          const kickChanged = norm(newConfig.kickUsername) !== norm(this.config.kickUsername);
+          const ytChanged = norm(newConfig.ytVideoInput) !== norm(this.config.ytVideoInput) || norm(newConfig.ytApiKey) !== norm(this.config.ytApiKey);
+          const tiktokChanged = norm(newConfig.tiktokUsername) !== norm(this.config.tiktokUsername) || norm(newConfig.tiktokApiToken) !== norm(this.config.tiktokApiToken);
+          const tfChanged = norm(newConfig.tikfinityEnabled) !== norm(this.config.tikfinityEnabled);
 
           this.config = { ...this.config, ...newConfig };
           this.applyTTSSettings();
@@ -859,11 +870,12 @@ class Application {
           if (tiktokChanged) {
             if (this.config.tiktokUsername) {
               this.tiktok.connect(this.config.tiktokUsername, this.config.tiktokApiToken);
-              if (this.tikfinity) this.tikfinity.connect();
             } else {
               this.tiktok.disconnect();
-              if (this.tikfinity) this.tikfinity.disconnect();
             }
+          }
+          if (tiktokChanged || tfChanged) {
+            this.syncTikfinity();
           }
         } catch (err) {}
       }
@@ -1004,7 +1016,7 @@ class Application {
       this.config.tiktokApiToken = token;
       this.notifyConfigChange();
       this.tiktok.connect(username, token);
-      if (this.tikfinity) this.tikfinity.connect();
+      this.syncTikfinity();
     });
 
     // TikTok Token change (persist tanpa harus reconnect)
@@ -1018,7 +1030,7 @@ class Application {
       this.config.tiktokUsername = '';
       this.notifyConfigChange();
       this.tiktok.disconnect();
-      if (this.tikfinity) this.tikfinity.disconnect();
+      this.syncTikfinity();
     });
 
     // TTS Settings Controls
@@ -1785,7 +1797,7 @@ class Application {
     if (!slide) return;
 
     try {
-      const uploadUrl = `http://localhost:8765/api/upload?filename=${encodeURIComponent(file.name)}`;
+      const uploadUrl = `${this.getConfigApiUrl().replace('/api/config', '/api/upload')}?filename=${encodeURIComponent(file.name)}`;
       const res = await fetch(uploadUrl, {
         method: 'POST',
         headers: {
@@ -1936,28 +1948,6 @@ class Application {
     }
   }
 
-  broadcastChalertEvent(payload) {
-    const eventPayload = {
-      type: 'CHALERT_EVENT',
-      payload: payload,
-      timestamp: Date.now()
-    };
-
-    if (this.chalertBroadcastChannel) {
-      try {
-        this.chalertBroadcastChannel.postMessage(eventPayload);
-      } catch (e) {}
-    }
-
-    try {
-      localStorage.setItem('zover_chalert_event', JSON.stringify(eventPayload));
-    } catch (e) {}
-
-    if (this.dashboardChalertWidget) {
-      this.dashboardChalertWidget.enqueue(payload);
-    }
-  }
-
   broadcastChalertConfig() {
     if (!this.config.chalert) return;
     const payload = {
@@ -2037,5 +2027,47 @@ class Application {
     }
 
     this.logActivity(`[Chalert Sim] Mengirim uji coba: ${type.toUpperCase()}`, 'info');
+  }
+}
+
+function initApp() {
+  if (window.app) return;
+
+  // Prompts user to start local server whenever page is loaded over direct file URI
+  if (typeof window !== 'undefined' && window.location && window.location.protocol === 'file:') {
+    let warningEl = document.getElementById('file-protocol-warning');
+    if (!warningEl && document.body) {
+      warningEl = document.createElement('div');
+      warningEl.id = 'file-protocol-warning';
+      warningEl.style.cssText = 'position:fixed; top:0; left:0; right:0; z-index:999999; background:#dc2626; color:#ffffff; padding:10px 16px; text-align:center; font-family:"Geist", -apple-system, sans-serif; font-size:13px; font-weight:600; box-shadow:0 4px 12px rgba(0,0,0,0.5);';
+      warningEl.innerHTML = 'Aplikasi dibuka via file:// — Mohon jalankan START_SERVER.bat lalu buka <a href="http://localhost:8765" style="color:#ffffff; text-decoration:underline; font-weight:700;">http://localhost:8765</a>';
+      document.body.prepend(warningEl);
+    } else if (warningEl) {
+      warningEl.style.display = 'block';
+    }
+  }
+
+  const urlParams = new URLSearchParams(window.location.search || '');
+  const path = (window.location.pathname || '').toLowerCase();
+  const isChalertOverlay = path.endsWith('overlay_chalert.html') || urlParams.get('mode') === 'chalert';
+  const isChatOverlay = path.endsWith('overlay_chat.html') || urlParams.get('mode') === 'overlay';
+  const isOverlayMode = isChalertOverlay || isChatOverlay;
+
+  if (isOverlayMode && document.body) {
+    document.body.classList.add('mode-overlay');
+    if (isChalertOverlay) {
+      document.body.classList.add('mode-chalert-overlay');
+    }
+  }
+
+  // Initialize Application Instance
+  window.app = new Application(isOverlayMode, isChalertOverlay);
+}
+
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initApp);
+  } else {
+    initApp();
   }
 }

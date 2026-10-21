@@ -461,7 +461,48 @@
     connector.parseIndoFinityPayload(likePacket);
     runner.assertEqual('TikTok: IndoFinity skips room total like packet', receivedAlert, null);
 
+    // 6.5 Native Follow Alert Parsing & Deduplication
+    receivedAlert = null;
+    connector.handleNativePayload({
+      type: 'follow',
+      data: {
+        uniqueId: 'follower_1',
+        nickname: 'Follower Keren',
+        profilePictureUrl: 'https://p16.tiktokcdn.com/avatar.jpg'
+      }
+    });
+    runner.assert('TikTok: Native follow event routed to onAlert', !!receivedAlert);
+    runner.assertEqual('TikTok: Follow alert type is tiktok_follow', receivedAlert?.type, 'tiktok_follow');
+    runner.assertEqual('TikTok: User captures nickname', receivedAlert?.user, 'Follower Keren');
+    runner.assertEqual('TikTok: Avatar captures profilePictureUrl', receivedAlert?.avatar, 'https://p16.tiktokcdn.com/avatar.jpg');
+
+    // Duplicate follow in same session is ignored
+    receivedAlert = null;
+    connector.handleNativePayload({
+      type: 'follow',
+      data: {
+        uniqueId: 'follower_1',
+        nickname: 'Follower Keren',
+        profilePictureUrl: 'https://p16.tiktokcdn.com/avatar.jpg'
+      }
+    });
+    runner.assertEqual('TikTok: Native duplicate follow in same session is ignored', receivedAlert, null);
+
+    // 6.6 Native Viewers Count Event
+    let receivedViewCount = 0;
+    connector.onViewCount = (count) => { receivedViewCount = count; };
+    connector.handleNativePayload({
+      type: 'viewers',
+      data: {
+        viewerCount: 420
+      }
+    });
+    runner.assertEqual('TikTok: Native viewers count parsed and routed to onViewCount', receivedViewCount, 420);
+
+    // 6.7 Disconnect Resets Viewcount to 0
     connector.disconnect();
+    runner.assertEqual('TikTok: Disconnect resets viewcount to 0', receivedViewCount, 0);
+
     console.groupEnd();
   }
 

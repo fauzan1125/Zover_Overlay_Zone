@@ -133,6 +133,8 @@ class YouTubeConnector {
         const data = await res.json();
 
         if (data.items) {
+          // fetch pertama (tanpa token) mengembalikan batch riwayat, bukan pesan baru
+          const isFirstPoll = !st.nextPageToken;
           data.items.forEach(item => {
             if (this.seenMessageIds.has(item.id)) return;
             this.seenMessageIds.add(item.id);
@@ -145,6 +147,7 @@ class YouTubeConnector {
               message: item.snippet?.displayMessage || item.snippet?.textMessageDetails?.messageText || '',
               avatar: item.authorDetails?.profileImageUrl || 'https://www.youtube.com/favicon.ico',
               badges: [],
+              isHistory: isFirstPoll,
               timestamp: new Date(item.snippet?.publishedAt)
             };
 
@@ -209,7 +212,13 @@ class YouTubeConnector {
         if (st && contMatch && contMatch[1]) {
           st.continuation = contMatch[1];
         }
-        this.parseLiveChatHtml(html);
+        // load pertama per video = backlog; tandai isHistory agar TTS tidak membaca komentar lama
+        if (st) {
+          this.parseLiveChatHtml(html, !st.backlogLoaded);
+          st.backlogLoaded = true;
+        } else {
+          this.parseLiveChatHtml(html, true);
+        }
         return true;
       }
     } catch (e) {
@@ -222,6 +231,9 @@ class YouTubeConnector {
     if (!this.isPolling || this.videoIds.length === 0) return;
 
     await Promise.all(this.videoIds.map(id => this.pollOneVideo(id)));
+
+    // seenMessageIds juga tumbuh di mode proxy, bukan hanya mode API
+    this.trimSeenIds();
 
     if (this.isPolling) {
       // Adaptive polling: slow down on errors, speed up on success
@@ -265,7 +277,10 @@ class YouTubeConnector {
       const html = await res.text();
 
       if (html && html.length > 500) {
-        this.parseLiveChatHtml(html);
+        // fetch recovery saat continuation putus tetap real-time; hanya load pertama
+        // yang backlog — pesan lama terlindungi seenMessageIds dari pengulangan
+        this.parseLiveChatHtml(html, !st.backlogLoaded);
+        st.backlogLoaded = true;
         st.failCount = 0;
 
         const contMatch = html.match(/"continuation"\s*:\s*"([^"]+)"/);
@@ -314,7 +329,7 @@ class YouTubeConnector {
     }
   }
 
-  parseLiveChatJson(ytData) {
+  parseLiveChatJson(ytData, isHistory = false) {
     let foundAny = false;
     try {
       const actions = ytData.contents?.liveChatRenderer?.actions ||
@@ -329,7 +344,8 @@ class YouTubeConnector {
           const memberItem = renderer.liveChatMembershipItemRenderer || renderer.liveChatSponsorMessageRenderer || renderer.liveChatSubAnnouncementRenderer;
           if (memberItem) {
             const subName = memberItem.authorName?.simpleText || 'YouTube Viewer';
-            if (this.onAlert) {
+            // sub dari halaman riwayat (initial load) jangan memicu alert, sama seperti chat
+            if (this.onAlert && !isHistory) {
               this.onAlert({
                 type: 'yt_sub',
                 platform: 'youtube',
@@ -339,7 +355,7 @@ class YouTubeConnector {
           }
 
           const item = renderer.liveChatTextMessageRenderer || renderer.liveChatPaidMessageRenderer;
-          if (item && this.processChatItem(item)) foundAny = true;
+          if (item && this.processChatItem(item, isHistory)) foundAny = true;
         });
       }
     } catch (err) {
@@ -348,7 +364,7 @@ class YouTubeConnector {
     return foundAny;
   }
 
-  parseLiveChatHtml(html) {
+  parseLiveChatHtml(html, isHistory = false) {
     if (!html) return false;
     let foundAny = false;
 
@@ -359,7 +375,7 @@ class YouTubeConnector {
                     html.match(/ytInitialData\s*=\s*({.*?});/s);
       if (match && match[1]) {
         const ytData = JSON.parse(match[1]);
-        if (this.parseLiveChatJson(ytData)) foundAny = true;
+        if (this.parseLiveChatJson(ytData, isHistory)) foundAny = true;
       }
     } catch (err) {
       console.warn('[YouTube Parse Error]', err);
@@ -373,7 +389,7 @@ class YouTubeConnector {
         while ((m = regex.exec(html)) !== null) {
           try {
             const item = JSON.parse(m[1]);
-            if (this.processChatItem(item)) foundAny = true;
+            if (this.processChatItem(item, isHistory)) foundAny = true;
           } catch (e) {}
         }
       } catch (e) {}
@@ -382,7 +398,7 @@ class YouTubeConnector {
     return foundAny;
   }
 
-  processChatItem(item) {
+  processChatItem(item, isHistory = false) {
     if (!item || !item.id) return false;
 
     const id = item.id;
@@ -416,6 +432,8 @@ class YouTubeConnector {
         message,
         avatar,
         badges: [],
+        // riwayat saat refresh/initial-load: tampil di chat tapi tidak dibacakan TTS
+        isHistory: Boolean(isHistory),
         timestamp: new Date()
       };
 

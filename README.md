@@ -2,7 +2,9 @@
 
 **Gabungan live chat Kick + YouTube + TikTok dalam satu OBS Browser Source, dengan pembaca komentar otomatis "Mbak Google" berbahasa Indonesia.**
 
-Aplikasi web ringan (vanilla JavaScript, tanpa build tool) yang berjalan **100% lokal** di PC Anda melalui server PowerShell kecil. Cocok untuk streamer multi-platform yang ingin semua komentar penonton tampil rapi di siaran dan dibacakan dengan suara.
+Aplikasi web ringan (vanilla JavaScript, tanpa build tool) yang berjalan **100% lokal** di PC Anda melalui server lokal Node.js (dengan fallback PowerShell). Cocok untuk streamer multi-platform yang ingin semua komentar penonton tampil rapi di siaran dan dibacakan dengan suara.
+
+> **Catatan Koneksi Internet**: Dashboard kontrol (`index.html`) memerlukan koneksi internet untuk memuat pustaka CDN (Google Fonts, Bootstrap Icons, Material Symbols). Tampilan overlay OBS (`overlay_*.html`) dirancang mandiri dan tidak membutuhkan aset CDN tersebut.
 
 ---
 
@@ -38,6 +40,7 @@ Aplikasi web ringan (vanilla JavaScript, tanpa build tool) yang berjalan **100% 
 | Browser | Chrome / Edge modern (untuk dashboard & TTS) |
 | OBS Studio | Opsional, untuk menampilkan overlay |
 | TikTok Bridge | **Tidak perlu lagi IndoFinity / TikFinity** (Konektor bawaan Native Direct terintegrasi) |
+| Koneksi Internet | Diperlukan oleh dashboard untuk CDN (font & ikon). Overlay OBS berjalan tanpa CDN |
 
 ---
 

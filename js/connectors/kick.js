@@ -20,11 +20,25 @@ class KickConnector {
     this.pusherCluster = 'us2';
   }
 
+  cleanUsername(raw) {
+    if (!raw) return '';
+    // Stripping protocol, domain, and at-signs handles user pastes directly from browser address bars
+    return String(raw)
+      .trim()
+      .replace(/^@+/, '')
+      .replace(/^(?:https?:\/\/)?(?:www\.)?kick\.com\//i, '')
+      .replace(/[/?#].*$/, '')
+      .toLowerCase();
+  }
+
   async connect(username) {
     if (!username) return;
     this.disconnect();
 
-    this.username = username.trim().toLowerCase();
+    const sanitized = this.cleanUsername(username);
+    if (!sanitized) return;
+
+    this.username = sanitized;
     this.updateStatus('connecting', `Mencari channel Kick: ${this.username}...`);
 
     try {
@@ -43,7 +57,8 @@ class KickConnector {
   }
 
   async fetchChatroomId(username) {
-    const cleanUser = username.toLowerCase();
+    const cleanUser = this.cleanUsername(username);
+    if (!cleanUser) return null;
 
     const t = Date.now();
     const kickApiUrl = `https://kick.com/api/v2/channels/${encodeURIComponent(cleanUser)}`;
@@ -51,7 +66,9 @@ class KickConnector {
 
     // Strategy 1: Local server proxy (fastest and most reliable)
     try {
-      const localProxyUrl = `http://localhost:8765/proxy?url=${encodeURIComponent(kickApiUrl + '?_t=' + t)}`;
+      // Using dynamic origin prevents CORS issues when accessed via loopback IP vs localhost
+      const baseOrigin = (typeof window !== 'undefined' && window.location && window.location.origin && window.location.origin.startsWith('http')) ? window.location.origin : 'http://127.0.0.1:8765';
+      const localProxyUrl = `${baseOrigin}/proxy?url=${encodeURIComponent(kickApiUrl + '?_t=' + t)}`;
       const res = await fetch(localProxyUrl, { signal: AbortSignal.timeout ? AbortSignal.timeout(4000) : undefined });
       if (res.ok) {
         const text = await res.text();

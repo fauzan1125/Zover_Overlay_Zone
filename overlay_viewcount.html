@@ -16,15 +16,10 @@
     <div class="viewcount-bar" id="viewcount-bar" style="display:none;"></div>
   </div>
 
-  <script src="js/connectors/tikfinity.js"></script>
   <script src="js/viewcount.js"></script>
   <script>
     (function () {
       const vc = new ViewCountMonitor();
-      if (typeof TikFinityConnector !== 'undefined') {
-        const tf = new TikFinityConnector(null, (count) => vc.setTikTokCount(count), null);
-        tf.connect();
-      }
       vc.attachConfigPolling(5000);
     })();
   </script>
