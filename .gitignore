@@ -27,8 +27,10 @@ yarn-error.log*
 # Local AI configuration and private instruction guidelines
 .agents/
 AGENTS.md
+GEMINI.md
 anti-slop-main/
 antislop.md
+superpowers-main/
 .gemini/
 
 # Reference design bundles and upstream prototypes
