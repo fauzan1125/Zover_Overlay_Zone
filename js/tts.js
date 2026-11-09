@@ -20,6 +20,7 @@ class MbakGoogleTTS {
     this.isPlaying = false;
     this.currentAudio = null;
     this.recentSpeechFps = new Map();
+    this.seenEventIds = new Map();
     this.instanceId = `tts_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
     // Web Speech API
@@ -101,9 +102,37 @@ class MbakGoogleTTS {
     }
   }
 
+  /**
+   * Cek dan catat deduplikasi event berdasarkan UUIDv4 / ID unik (FR-06).
+   * Retensi: 60 detik, kapasitas maksimal 200 items.
+   */
+  isDuplicateEvent(id) {
+    if (!id) return false;
+    const now = Date.now();
+    for (const [cachedId, timestamp] of this.seenEventIds.entries()) {
+      if (now - timestamp > 60000) {
+        this.seenEventIds.delete(cachedId);
+      }
+    }
+    if (this.seenEventIds.has(id)) {
+      return true;
+    }
+    this.seenEventIds.set(id, now);
+    if (this.seenEventIds.size > 200) {
+      const oldest = this.seenEventIds.keys().next().value;
+      this.seenEventIds.delete(oldest);
+    }
+    return false;
+  }
+
   speakMessage(chatData) {
     // isHistory dicek di mesin, bukan hanya di app.js, agar semua konsumen ikut kebal backlog
     if (!this.enabled || !chatData || !chatData.message || chatData.isHistory) return;
+
+    // Deduplikasi UUIDv4 / ID pesan unik (FR-06)
+    if (chatData.id && this.isDuplicateEvent(chatData.id)) {
+      return;
+    }
 
     const platform = (chatData.platform || 'youtube').toLowerCase();
     if (this.platforms[platform] === false) return;
@@ -431,4 +460,18 @@ class MbakGoogleTTS {
   }
 }
 
-window.MbakGoogleTTS = MbakGoogleTTS;
+// Lifecycle Guard: Batalkan Web Speech API saat instance OBS/tab dimuat ulang atau ditutup
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', () => {
+    try {
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    } catch (_) {}
+  });
+  window.MbakGoogleTTS = MbakGoogleTTS;
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = MbakGoogleTTS;
+}

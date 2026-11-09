@@ -716,6 +716,39 @@
       }
       return `rgba(59, 130, 246, ${alpha})`;
     }
+
+    destroy() {
+      if (this.chatHideTimer) {
+        clearTimeout(this.chatHideTimer);
+        this.chatHideTimer = null;
+      }
+      if (this.alertTimer) {
+        clearTimeout(this.alertTimer);
+        this.alertTimer = null;
+      }
+      this.alertQueue = [];
+      this.isProcessingAlert = false;
+      this.currentAlert = null;
+      if (this.audioPlayer) {
+        try {
+          this.audioPlayer.pause();
+          this.audioPlayer.src = '';
+        } catch (_) {}
+      }
+      if (this.tts && typeof this.tts.stop === 'function') {
+        this.tts.stop();
+      }
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('beforeunload', () => {
+      try {
+        if (window.chalertWidget && typeof window.chalertWidget.destroy === 'function') {
+          window.chalertWidget.destroy();
+        }
+      } catch (_) {}
+    });
   }
 
   return ChalertWidget;

@@ -49,6 +49,10 @@ migrasi_zover*.txt
 # Transient scratch audio and local test dumps
 test.mp3
 test2.mp3
+
+# Rust target directories
+**/target/
+test2.mp3
 test_*.mp3
 brave_out.txt
 test_err.html

@@ -2071,3 +2071,28 @@ if (typeof document !== 'undefined') {
     initApp();
   }
 }
+
+// Lifecycle Guard: Putus koneksi socket & stop TTS saat window/OBS di-refresh atau ditutup
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', () => {
+    try {
+      if (window.app) {
+        if (window.app.kick && typeof window.app.kick.disconnect === 'function') {
+          window.app.kick.disconnect();
+        }
+        if (window.app.youtube && typeof window.app.youtube.disconnect === 'function') {
+          window.app.youtube.disconnect();
+        }
+        if (window.app.tiktok && typeof window.app.tiktok.disconnect === 'function') {
+          window.app.tiktok.disconnect();
+        }
+        if (window.app.tikfinity && typeof window.app.tikfinity.disconnect === 'function') {
+          window.app.tikfinity.disconnect();
+        }
+        if (window.app.tts && typeof window.app.tts.stop === 'function') {
+          window.app.tts.stop();
+        }
+      }
+    } catch (_) {}
+  });
+}

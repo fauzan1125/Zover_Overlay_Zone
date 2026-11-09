@@ -406,9 +406,40 @@ class AlertOverlayManager {
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
   }
+
+  destroy() {
+    this.queue = [];
+    this.isPlaying = false;
+    if (this.currentTimer) {
+      clearTimeout(this.currentTimer);
+      this.currentTimer = null;
+    }
+    if (this.hideTimeout) {
+      clearTimeout(this.hideTimeout);
+      this.hideTimeout = null;
+    }
+    if (this.audioPlayer) {
+      try {
+        this.audioPlayer.pause();
+        this.audioPlayer.src = '';
+      } catch (_) {}
+    }
+  }
 }
 
 // Inisialisasi Alert Overlay saat DOM siap
-document.addEventListener('DOMContentLoaded', () => {
-  window.alertOverlay = new AlertOverlayManager();
-});
+if (typeof document !== 'undefined') {
+  document.addEventListener('DOMContentLoaded', () => {
+    window.alertOverlay = new AlertOverlayManager();
+  });
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', () => {
+    try {
+      if (window.alertOverlay && typeof window.alertOverlay.destroy === 'function') {
+        window.alertOverlay.destroy();
+      }
+    } catch (_) {}
+  });
+}

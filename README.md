@@ -47,12 +47,12 @@ Aplikasi web ringan (vanilla JavaScript, tanpa build tool) yang berjalan **100% 
 ## 📥 Cara Install & Menjalankan (dari GitHub)
 
 1. **Clone atau Download** repository ini (`git clone https://github.com/...` atau klik **Code → Download ZIP** lalu ekstrak).
-2. **Double-click `START_SERVER.bat`**.
-   - Skrip akan otomatis mendeteksi Node.js dan mengunduh dependensi (`npm install`) saat pertama kali dijalankan.
-   - Jendela server akan terbuka di `http://localhost:8765`.
-   - **Biarkan jendela ini tetap terbuka** selama live streaming.
-3. Buka browser, kunjungi **`http://localhost:8765`**.
-4. Isi username platform pada menu **Koneksi Stream**, lalu klik **Hubungkan**.
+2. **Double-click `ZoVer.exe`** (Aplikasi Desktop Windows mandiri).
+   - Server berjalan otomatis secara hening di balik layar tanpa jendela hitam Command Prompt.
+   - Jendela Dashboard ZoVer langsung terbuka seperti aplikasi desktop TikFinity/IndoFinity.
+   - Ikon ZoVer akan muncul di dekat jam (System Tray) untuk kontrol cepat dan salin link OBS instan.
+   *(Alternatif manual: Anda juga tetap bisa menggunakan `START_SERVER.bat`)*
+3. Isi username platform pada menu **Koneksi Stream**, lalu klik **Hubungkan**.
 5. (Opsional) Untuk OBS Studio: klik tombol **"Salin Link OBS"** untuk Chatbox, ViewCount, Alert, atau Chalert, lalu tempel sebagai Browser Source di OBS.
 
 ---

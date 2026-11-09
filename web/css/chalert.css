@@ -1,0 +1,359 @@
+/* ==========================================================================
+   CHALERT - Unified Chat & Alert Dynamic Island (iPhone 17 Style)
+   Clean, high-performance styling using Apple spring physics transitions.
+   ========================================================================== */
+
+:root {
+  --chalert-bg: #050505;
+  --chalert-border: rgba(255, 255, 255, 0.14);
+  --chalert-text: #ffffff;
+  --chalert-subtext: rgba(255, 255, 255, 0.7);
+  --chalert-accent: #3b82f6;
+  --chalert-glow: rgba(59, 130, 246, 0.4);
+  --apple-spring: cubic-bezier(0.32, 0.72, 0, 1);
+  --apple-spring-fast: cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body.overlay-body {
+  background: transparent !important;
+  color: var(--chalert-text);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Geist", "Inter", sans-serif;
+  overflow: hidden;
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Base Stage */
+.chalert-stage {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.chalert-stage.pos-top-center {
+  top: 18px;
+  left: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.chalert-stage.pos-bottom-center {
+  bottom: 24px;
+  left: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+}
+
+/* Dynamic Island Capsule */
+.chalert-island {
+  position: relative;
+  background: var(--chalert-bg);
+  border: 1.5px solid var(--chalert-border);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  color: var(--chalert-text);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  pointer-events: auto;
+  transform-origin: center center;
+  will-change: width, height, border-radius, box-shadow, transform;
+  transition:
+    width 0.52s var(--apple-spring),
+    height 0.52s var(--apple-spring),
+    border-radius 0.52s var(--apple-spring),
+    box-shadow 0.4s ease,
+    border-color 0.4s ease,
+    background-color 0.3s ease,
+    opacity 0.3s ease,
+    transform 0.45s var(--apple-spring);
+}
+
+/* Glass Variant */
+.chalert-island.theme-glass {
+  background: rgba(12, 14, 18, 0.82);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+
+/* --------------------------------------------------------------------------
+   State 1: IDLE (Compact Pill)
+   -------------------------------------------------------------------------- */
+.chalert-island.state-idle {
+  width: 138px;
+  height: 38px;
+  border-radius: 999px;
+  padding: 0 14px;
+}
+
+.chalert-island.state-hidden {
+  width: 0;
+  height: 0;
+  opacity: 0;
+  border-width: 0;
+  pointer-events: none;
+}
+
+.island-idle-view {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  text-align: center;
+  transition: opacity 0.25s ease;
+}
+
+.idle-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--chalert-subtext);
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+/* --------------------------------------------------------------------------
+   State 2: CHAT (Horizontal Expansion)
+   -------------------------------------------------------------------------- */
+.chalert-island.state-chat {
+  width: clamp(300px, 46vw, 520px);
+  height: 56px;
+  border-radius: 28px;
+  padding: 0 16px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+/* --------------------------------------------------------------------------
+   State 3: MICRO_ALERT (Follow / Like / Share)
+   -------------------------------------------------------------------------- */
+.chalert-island.state-micro-alert {
+  width: clamp(340px, 50vw, 480px);
+  height: 66px;
+  border-radius: 33px;
+  padding: 0 18px;
+  border-color: rgba(255, 255, 255, 0.22);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.7), 0 0 24px -4px var(--chalert-glow);
+}
+
+/* --------------------------------------------------------------------------
+   State 4: MAJOR_ALERT (Gift / Saweria / Sub)
+   -------------------------------------------------------------------------- */
+.chalert-island.state-major-alert {
+  width: clamp(400px, 58vw, 560px);
+  height: 126px;
+  border-radius: 38px;
+  padding: 18px 22px;
+  border-color: rgba(255, 255, 255, 0.28);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.8), 0 0 40px -4px var(--chalert-glow);
+}
+
+/* --------------------------------------------------------------------------
+   Active Card View Content (Chat & Alert)
+   -------------------------------------------------------------------------- */
+.island-card-view {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  gap: 14px;
+  opacity: 0;
+  transform: scale(0.96);
+  transition: opacity 0.3s ease, transform 0.4s var(--apple-spring-fast);
+}
+
+.chalert-island:not(.state-idle):not(.state-hidden) .island-card-view {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.chalert-island:not(.state-idle):not(.state-hidden) .island-idle-view {
+  display: none;
+}
+
+.chalert-island.state-idle .island-card-view {
+  display: none;
+}
+
+/* Avatar Element */
+.island-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.island-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #181a20;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  transition: width 0.4s var(--apple-spring), height 0.4s var(--apple-spring);
+}
+
+.state-major-alert .island-avatar {
+  width: 58px;
+  height: 58px;
+  border-width: 2px;
+  border-color: var(--chalert-accent);
+}
+
+.island-platform-badge {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.island-platform-badge img {
+  width: 10px;
+  height: 10px;
+  object-fit: contain;
+}
+
+/* Card Body */
+.island-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+}
+
+.island-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.2;
+}
+
+.island-username {
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.island-tag {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.85);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+
+.island-tag.accented {
+  background: var(--chalert-accent);
+  color: #000000;
+  font-weight: 700;
+}
+
+.island-text {
+  font-size: 13.5px;
+  color: #e5e7eb;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.state-major-alert .island-text {
+  font-size: 14px;
+  color: #f3f4f6;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.island-highlight {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--chalert-accent);
+  letter-spacing: -0.2px;
+}
+
+/* Side Icon / Gift Box */
+.island-side-graphic {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.side-gift-icon {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  transition: transform 0.4s var(--apple-spring);
+}
+
+.state-major-alert .side-gift-icon {
+  width: 52px;
+  height: 52px;
+  animation: giftBounce 0.8s ease infinite alternate;
+}
+
+@keyframes giftBounce {
+  0% { transform: scale(1) translateY(0); }
+  100% { transform: scale(1.12) translateY(-4px); }
+}
+
+/* Ripple ring animation for likes */
+.island-like-burst {
+  position: absolute;
+  top: 50%;
+  right: 18px;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 30px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.state-micro-alert .island-like-burst {
+  display: flex;
+}
+
+.like-heart-icon {
+  font-size: 20px;
+  color: #ec4899;
+  animation: heartThrob 0.6s ease infinite alternate;
+}
+
+@keyframes heartThrob {
+  0% { transform: scale(0.9); }
+  100% { transform: scale(1.25); }
+}

@@ -190,6 +190,17 @@ $dummyEvt = @{
 Assert-Test "EventQueue correctly stores and retrieves events" ($testQueue.Count -eq 1 -and $testQueue[0].id -eq "evt_test_1")
 
 # ------------------------------------------------------------
+# 8. ZoVer v3.0 Specification: UUID Stamping & IPv4 Strict Binding
+# ------------------------------------------------------------
+Write-Host "`n--- Test Group 8: v3.0 Engine Spec Verification ---" -ForegroundColor Cyan
+$serverJsPath = Join-Path $rootDir "server.js"
+$serverJsContent = Get-Content $serverJsPath -Raw
+
+Assert-Test "server.js binds strictly to IPv4 127.0.0.1" ($serverJsContent -match "server\.listen\(PORT,\s*'127\.0\.0\.1'")
+Assert-Test "server.js imports crypto module" ($serverJsContent -match "require\('crypto'\)")
+Assert-Test "server.js broadcast stamps event with unique UUID" ($serverJsContent -match "payload\.id\s*=\s*crypto\.randomUUID")
+
+# ------------------------------------------------------------
 # Summary
 # ------------------------------------------------------------
 Write-Host "`n============================================================" -ForegroundColor Cyan

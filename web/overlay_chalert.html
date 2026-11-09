@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="referrer" content="no-referrer">
+  <title>Chalert Overlay - ZoVer</title>
+  <link rel="stylesheet" href="css/chalert.css">
+</head>
+<body class="overlay-body">
+
+  <div id="chalertStage" class="chalert-stage pos-top-center">
+    <div id="chalertIsland" class="chalert-island state-idle">
+      
+      <!-- 1. Idle Pill State View -->
+      <div id="islandIdleView" class="island-idle-view">
+        <span id="islandIdleText" class="idle-text">@lazuri1125</span>
+      </div>
+
+      <!-- 2. Active Card View (Chat & Alert) -->
+      <div id="islandCardView" class="island-card-view">
+        <div class="island-avatar-wrap">
+          <img id="islandAvatar" class="island-avatar" alt="Avatar">
+          <div id="islandPlatformBadge" class="island-platform-badge">
+            <img id="islandPlatformImg" alt="Platform">
+          </div>
+        </div>
+
+        <div class="island-body">
+          <div class="island-meta-row">
+            <span id="islandUsername" class="island-username">User</span>
+            <span id="islandTag" class="island-tag" style="display:none;">ALERT</span>
+          </div>
+          <div id="islandHighlight" class="island-highlight" style="display:none;"></div>
+          <div id="islandText" class="island-text"></div>
+        </div>
+
+        <div id="islandSideGraphic" class="island-side-graphic" style="display:none;">
+          <img id="islandSideIcon" class="side-gift-icon" alt="Gift">
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Audio Elements for Chalert & Alert SFX -->
+  <audio id="chalert-audio-player" preload="auto"></audio>
+  <audio id="chalertAudioPlayer" preload="auto"></audio>
+  <audio id="alert-audio-player" preload="auto"></audio>
+
+  <!-- JavaScript Modules: TTS, Chalert Island, Connectors & Main Controller -->
+  <script src="js/tts.js"></script>
+  <script src="js/chalert.js"></script>
+  <script src="js/overlay.js"></script>
+  <script src="js/connectors/kick.js"></script>
+  <script src="js/connectors/youtube.js"></script>
+  <script src="js/connectors/tiktok.js"></script>
+  <script src="js/connectors/tikfinity.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

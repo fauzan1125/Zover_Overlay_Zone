@@ -124,6 +124,32 @@
       `Formatted result was: "${formatted}"`
     );
 
+    // 1.6 Event UUID Deduplication (ZoVer v3.0 Specification)
+    runner.assert('TTS: Has isDuplicateEvent method', typeof tts.isDuplicateEvent === 'function');
+    const testUUID = 'test-uuid-' + Date.now();
+    runner.assertEqual('TTS: First encounter of UUID is not duplicate', tts.isDuplicateEvent(testUUID), false);
+    runner.assertEqual('TTS: Second encounter of same UUID is detected as duplicate', tts.isDuplicateEvent(testUUID), true);
+
+    tts.queue = [];
+    const origPlayNext3 = tts.playNext;
+    tts.playNext = function () {};
+    const dupEvent = { id: 'evt-dup-12345', platform: 'youtube', username: 'Citra', message: 'Halo dunia' };
+    tts.speakMessage(dupEvent);
+    runner.assertEqual('TTS: Initial message with ID enqueued', tts.queue.length, 1);
+    tts.speakMessage(dupEvent);
+    runner.assertEqual('TTS: Duplicate event with same ID within retention rejected', tts.queue.length, 1);
+    tts.playNext = origPlayNext3;
+
+    // 1.7 Deterministic FIFO Queue & Stop Teardown
+    tts.queue = [];
+    tts.isPlaying = true; // Simulate active playback lock
+    tts.speakMessage({ id: 'evt-fifo-1', platform: 'youtube', username: 'Doni', message: 'Antrean satu' });
+    tts.speakMessage({ id: 'evt-fifo-2', platform: 'youtube', username: 'Eka', message: 'Antrean dua' });
+    runner.assertEqual('TTS: Serial queuing respects isPlaying lock', tts.queue.length, 2);
+    tts.stop();
+    runner.assertEqual('TTS: stop() empties queue and releases playback lock', tts.queue.length, 0);
+    runner.assertEqual('TTS: isPlaying reset to false after stop()', tts.isPlaying, false);
+
     tts.stop();
     console.groupEnd();
   }

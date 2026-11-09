@@ -12,6 +12,7 @@ const path = require('path');
 const url = require('url');
 const https = require('https');
 const zlib = require('zlib');
+const crypto = require('crypto');
 let WebSocketServer = null;
 try {
   ({ WebSocketServer } = require('ws'));
@@ -610,6 +611,14 @@ function getOrCreateTikTokRoom(username, sessionId) {
   };
 
   const broadcast = payload => {
+    if (payload && typeof payload === 'object') {
+      if (!payload.id) {
+        payload.id = crypto.randomUUID ? crypto.randomUUID() : `zover-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      }
+      if (payload.data && typeof payload.data === 'object' && !payload.data.id) {
+        payload.data.id = payload.data.msgId || payload.id;
+      }
+    }
     for (const client of room.clients) {
       if (client.readyState === client.OPEN) {
         try {

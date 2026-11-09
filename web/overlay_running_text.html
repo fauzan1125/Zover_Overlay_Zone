@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="referrer" content="no-referrer">
+  <title>Running Text Overlay - OBS</title>
+  <link rel="stylesheet" href="css/running_text.css">
+</head>
+
+<body class="mode-running-text">
+
+  <!-- OBS BROWSER SOURCE: RUNNING TEXT (DYNAMIC BRANDING CAROUSEL) -->
+  <div id="rt-viewport" class="rt-viewport">
+    <div id="rt-stage" class="rt-stage">
+      <div id="rt-logo-wrapper" class="rt-logo-wrapper" style="display:none;">
+        <img id="rt-logo-img" class="rt-logo-img" alt="Branding Logo">
+      </div>
+      <div id="rt-text-wrapper" class="rt-text-wrapper">
+        <div id="rt-line1" class="rt-line rt-line1"></div>
+        <div id="rt-line2" class="rt-line rt-line2"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/running_text.js"></script>
+  <script>
+    (function () {
+      const container = document.getElementById('rt-viewport');
+      const engine = new RunningTextEngine(container);
+      engine.attachConfigPolling(5000);
+      window.runningTextEngine = engine;
+    })();
+  </script>
+
+</body>
+
+</html>
