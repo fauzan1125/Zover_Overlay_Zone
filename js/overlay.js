@@ -63,7 +63,7 @@ class OverlayRenderer {
     let avatarHtml = '';
     if (this.showAvatars) {
       const avatarSrc = chatData.avatar || this.getDefaultAvatar(platform);
-      avatarHtml = `<img class="chat-avatar" src="${this.escapeHtml(avatarSrc)}" alt="${this.escapeHtml(chatData.username)}" onerror="this.src='${this.getDefaultAvatar(platform)}'">`;
+      avatarHtml = `<img class="chat-avatar" src="${this.escapeHtml(avatarSrc)}" alt="${this.escapeHtml(chatData.username)}" onerror="this.onerror=null; this.src='${this.getDefaultAvatar(platform)}'">`;
     }
 
     // Platform Badge Element

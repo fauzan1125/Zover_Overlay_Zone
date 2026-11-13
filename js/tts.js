@@ -462,6 +462,20 @@ class MbakGoogleTTS {
 
 // Lifecycle Guard: Batalkan Web Speech API saat instance OBS/tab dimuat ulang atau ditutup
 if (typeof window !== 'undefined') {
+  try {
+    if ('BroadcastChannel' in window) {
+      const zoverTabChannel = new BroadcastChannel('zover_tts_channel');
+      zoverTabChannel.postMessage({ type: 'NEW_TAB_ACTIVE' });
+      zoverTabChannel.onmessage = (e) => {
+        if (e.data && e.data.type === 'NEW_TAB_ACTIVE') {
+          if (window.speechSynthesis) {
+            try { window.speechSynthesis.cancel(); } catch (_) {}
+          }
+        }
+      };
+    }
+  } catch (_) {}
+
   window.addEventListener('beforeunload', () => {
     try {
       if (window.speechSynthesis) {

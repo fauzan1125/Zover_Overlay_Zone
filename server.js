@@ -518,6 +518,14 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Reject Windows 8.3 short name aliases (e.g. CONFIG~1.JSO, NODE_M~1) and trailing dot/space normalization bypasses
+  const relativeFromRoot = filePath.slice(ROOT_DIR.length);
+  if (relativeFromRoot.includes('~') || /[. ](\/|\\|$)/.test(pathname)) {
+    res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end('<h1>404 Not Found</h1>');
+    return;
+  }
+
   // Token config and server scripts must not be served raw through static routing.
   const lowerPath = pathname.toLowerCase();
   const lowerFile = path.basename(filePath).toLowerCase();
@@ -543,6 +551,26 @@ const server = http.createServer((req, res) => {
     if (err || !stats.isFile()) {
       res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(`<h1>404 Not Found</h1><p>${pathname}</p>`);
+      return;
+    }
+
+    // Resolve canonical native path to block any sneaky filesystem aliases
+    const realCanonicalPath = (fs.realpathSync && typeof fs.realpathSync.native === 'function')
+      ? (() => { try { return fs.realpathSync.native(filePath); } catch (_) { return filePath; } })()
+      : filePath;
+    const canonicalFile = path.basename(realCanonicalPath).toLowerCase();
+    const canonicalExt = path.extname(realCanonicalPath).toLowerCase();
+    const canonicalLower = realCanonicalPath.toLowerCase();
+
+    if (
+      blockedFiles.has(canonicalFile) ||
+      blockedExtensions.has(canonicalExt) ||
+      canonicalLower.includes(path.sep + 'node_modules' + path.sep) ||
+      canonicalLower.includes(path.sep + '.git' + path.sep) ||
+      canonicalLower.endsWith(path.sep + '.git')
+    ) {
+      res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end('<h1>404 Not Found</h1>');
       return;
     }
 

@@ -86,16 +86,40 @@ Assert-Test "Block subdomain bypass trick (kick.com.evil.com)" (-not (Test-HostA
 Assert-Test "Block non-http protocol (file:///etc/passwd)" (-not (Test-HostAllowed "file:///etc/passwd"))
 
 # ------------------------------------------------------------
-# 3. Path-Traversal Boundary Check
+# 3. Path-Traversal & Windows 8.3 / Trailing Dot Security
 # ------------------------------------------------------------
-Write-Host "`n--- Test Group 3: Path Traversal Security ---" -ForegroundColor Cyan
+Write-Host "`n--- Test Group 3: Path Traversal & File Access Security ---" -ForegroundColor Cyan
 
 function Test-PathSafety($urlPath, $baseDir) {
     if ($urlPath.Contains("`0") -or $urlPath.Contains(':')) { return $false }
     $filePath = Join-Path $baseDir ($urlPath -replace '/', '\')
     $rootFull = ([System.IO.Path]::GetFullPath($baseDir)).TrimEnd('\')
     $fullPath = [System.IO.Path]::GetFullPath($filePath)
-    return $fullPath.StartsWith($rootFull + '\')
+    if (-not $fullPath.StartsWith($rootFull + '\')) { return $false }
+
+    # Rejection of 8.3 SFN and trailing dot/space
+    $relPath = $fullPath.Substring($rootFull.Length)
+    if ($urlPath.Contains('~') -or $relPath.Contains('~') -or ($urlPath -match '[. ](\/|\\|$)')) { return $false }
+
+    $cleanFileName = [System.IO.Path]::GetFileName($fullPath).TrimEnd(' ', '.')
+    $lowerUrl = $urlPath.ToLower()
+    $fileName = $cleanFileName.ToLower()
+    $fileExt = [System.IO.Path]::GetExtension($cleanFileName).ToLower()
+    $blockedExts = @('.ps1', '.bat', '.cmd', '.key', '.pem')
+    $blockedFiles = @('config.json', 'migrasi_zover.txt', 'prd_update_zover.txt', 'update_zover_prd.txt')
+
+    if (
+        $blockedFiles -contains $fileName -or
+        $blockedExts -contains $fileExt -or
+        $lowerUrl.StartsWith('/.git/') -or
+        $lowerUrl -eq '/.git' -or
+        $lowerUrl.Contains('/node_modules/') -or
+        $fullPath.ToLower().Contains('\node_modules\') -or
+        $fullPath.ToLower().Contains('\.git\')
+    ) {
+        return $false
+    }
+    return $true
 }
 
 Assert-Test "Allow legit file in root (index.html)" (Test-PathSafety "/index.html" $rootDir)
@@ -104,6 +128,12 @@ Assert-Test "Block traversal with ../ (../../Windows/System32)" (-not (Test-Path
 Assert-Test "Block encoded traversal (/..%2f..%2f)" (-not (Test-PathSafety "/../config.json" $rootDir))
 Assert-Test "Block null byte injection (/index.html`0.png)" (-not (Test-PathSafety "/index.html`0.png" $rootDir))
 Assert-Test "Block colon ADS stream access (/index.html:stream)" (-not (Test-PathSafety "/index.html:stream" $rootDir))
+Assert-Test "Block Windows 8.3 SFN alias (/CONFIG~1.JSO)" (-not (Test-PathSafety "/CONFIG~1.JSO" $rootDir))
+Assert-Test "Block Windows 8.3 SFN folder (/NODE_M~1/package.json)" (-not (Test-PathSafety "/NODE_M~1/package.json" $rootDir))
+Assert-Test "Block trailing dot normalization (/config.json.)" (-not (Test-PathSafety "/config.json." $rootDir))
+Assert-Test "Block trailing space normalization (/config.json )" (-not (Test-PathSafety "/config.json " $rootDir))
+Assert-Test "Block direct config.json access (/config.json)" (-not (Test-PathSafety "/config.json" $rootDir))
+Assert-Test "Block script access (/server.ps1)" (-not (Test-PathSafety "/server.ps1" $rootDir))
 
 # ------------------------------------------------------------
 # 4. Local Origin (CSRF) Guard

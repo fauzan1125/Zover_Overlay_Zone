@@ -313,7 +313,7 @@ class AlertOverlayManager {
     let formattedTitle = rawTitle
       .replace(/{user}/gi, `<span class="alert-highlight">${this.escapeHtml(displayUser)}</span>`)
       .replace(/{gift}/gi, `<span class="alert-highlight">${this.escapeHtml(displayGift)}</span>`)
-      .replace(/{count}/gi, `<span class="alert-highlight">${displayCount}</span>`)
+      .replace(/{count}/gi, `<span class="alert-highlight">${this.escapeHtml(displayCount)}</span>`)
       .replace(/{platform}/gi, this.escapeHtml(platformLabel));
 
     const titleEl = document.createElement('div');

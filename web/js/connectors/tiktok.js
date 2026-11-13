@@ -51,6 +51,7 @@ class TikTokConnector {
     window.tiktokNativeActive = true;
     this.updateStatus('connecting', `Menghubungkan ke TikTok Live (@${this.username})...`);
 
+    this.lastDirectError = '';
     const directSuccess = await this.connectNativeWebSocket();
     if (directSuccess) return;
 
@@ -58,10 +59,17 @@ class TikTokConnector {
     const indoSuccess = await this.connectIndoFinityFallback();
     if (indoSuccess) return;
 
-    if (this.apiToken) {
-      this.updateStatus('disconnected', 'Gagal: Pastikan aplikasi IndoFinity sudah dibuka');
+    if (this.lastDirectError) {
+      const errMsg = this.lastDirectError.toLowerCase();
+      if (errMsg.includes('room id') || errMsg.includes('offline') || errMsg.includes('not found') || errMsg.includes('not live')) {
+        this.updateStatus('disconnected', `TikTok: Akun @${this.username} sedang Offline (Belum Live)`);
+      } else {
+        this.updateStatus('disconnected', `TikTok: ${this.lastDirectError}`);
+      }
+    } else if (this.apiToken) {
+      this.updateStatus('disconnected', 'Gagal terhubung ke TikTok atau IndoFinity');
     } else {
-      this.updateStatus('disconnected', 'TikTok: Mode Langsung butuh EulerStream Key, atau silakan buka IndoFinity');
+      this.updateStatus('disconnected', `TikTok: Akun @${this.username} offline atau butuh token`);
     }
   }
 
@@ -106,6 +114,7 @@ class TikTokConnector {
               } else if (payload.type === 'error') {
                 settled = true;
                 clearTimeout(timeout);
+                this.lastDirectError = payload.message || '';
                 try { ws.close(); } catch (_) {}
                 resolve(false);
                 return;
@@ -270,31 +279,71 @@ class TikTokConnector {
   processLikeEvent(data) {
     if (!data) return;
 
-    const addedLikes = Number(data.likeCount) || 1;
-    this.accumulatedLikes += addedLikes;
-
-    const step = this.milestoneStep || 100;
-    const currentMilestone = Math.floor(this.accumulatedLikes / step) * step;
+    const addedLikes = Number(data.likeCount || data.count) || 1;
+    const username = data.nickname || data.uniqueId || 'Penonton TikTok';
+    const userKey = String(data.uniqueId || username).trim().toLowerCase();
+    const avatar = data.profilePictureUrl || 'https://www.tiktok.com/favicon.ico';
     const now = Date.now();
 
+    this.accumulatedLikes += addedLikes;
+
+    // Inisialisasi map user likes burst
+    if (!this.userLikeBursts) this.userLikeBursts = new Map();
+    let userRecord = this.userLikeBursts.get(userKey);
+    if (!userRecord) {
+      userRecord = { count: 0, lastAlertTime: 0, timer: null };
+      this.userLikeBursts.set(userKey, userRecord);
+    }
+    userRecord.count += addedLikes;
+
+    const step = this.milestoneStep || 100;
+
+    // 1. Milestone Global Alert (tiap kelipatan step, default 100 like terkumpul di stream)
+    const currentMilestone = Math.floor(this.accumulatedLikes / step) * step;
     if (currentMilestone > this.lastLikeMilestone && currentMilestone >= step) {
       this.lastLikeMilestone = currentMilestone;
 
       if (now - this.lastLikeAlertTime >= 4000) {
         this.lastLikeAlertTime = now;
-        const user = data.nickname || data.uniqueId || 'Penonton TikTok';
+        if (this.onAlert) {
+          this.onAlert({
+            type: 'tiktok_like',
+            platform: 'tiktok',
+            user: username,
+            count: currentMilestone,
+            avatar
+          });
+        }
+        return;
+      }
+    }
+
+    // 2. Per-User Tap Alert (Trigger tap-tap interaktif penonton)
+    // Mengumpulkan tap beruntun penonton selama 2 detik sebelum memunculkan alert ucapan terima kasih
+    if (userRecord.timer) clearTimeout(userRecord.timer);
+    userRecord.timer = setTimeout(() => {
+      const burstCount = userRecord.count;
+      userRecord.count = 0;
+      userRecord.timer = null;
+
+      const timeSinceUser = Date.now() - (userRecord.lastAlertTime || 0);
+      const timeSinceGlobal = Date.now() - (this.lastLikeAlertTime || 0);
+
+      if (burstCount >= 1 && timeSinceUser >= 4000 && timeSinceGlobal >= 3000) {
+        userRecord.lastAlertTime = Date.now();
+        this.lastLikeAlertTime = Date.now();
 
         if (this.onAlert) {
           this.onAlert({
             type: 'tiktok_like',
             platform: 'tiktok',
-            user,
-            count: currentMilestone,
-            avatar: 'https://www.tiktok.com/favicon.ico'
+            user: username,
+            count: burstCount,
+            avatar
           });
         }
       }
-    }
+    }, 2000);
   }
 
   processFollowEvent(data) {

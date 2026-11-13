@@ -83,6 +83,8 @@
       this.applyConfig(this.options);
       if (!this.options.disableSync) {
         this.setupSyncChannels();
+      } else if (this.options.enableServerEvents) {
+        this.startServerEventsPolling();
       }
       this.showIdle();
       if (!this.options.disableSync) {

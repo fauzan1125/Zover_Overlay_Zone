@@ -1,32 +1,72 @@
+use std::path::PathBuf;
 use std::process::Stdio;
 use std::time::Duration;
 use tokio::process::Command;
 use tokio::time::sleep;
 
 pub struct SidecarManager {
-    worker_script: String,
+    auth_token: String,
 }
 
 impl SidecarManager {
-    pub fn new(worker_script: impl Into<String>) -> Self {
+    pub fn new(auth_token: impl Into<String>) -> Self {
         Self {
-            worker_script: worker_script.into(),
+            auth_token: auth_token.into(),
         }
+    }
+
+    pub fn resolve_script_path() -> Option<PathBuf> {
+        let candidates = [
+            PathBuf::from("sidecar/tiktok_worker.js"),
+            PathBuf::from("../sidecar/tiktok_worker.js"),
+        ];
+
+        for c in &candidates {
+            if c.exists() {
+                return Some(c.clone());
+            }
+        }
+
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(parent) = exe.parent() {
+                let p1 = parent.join("sidecar").join("tiktok_worker.js");
+                if p1.exists() {
+                    return Some(p1);
+                }
+                let p2 = parent.join("..").join("sidecar").join("tiktok_worker.js");
+                if p2.exists() {
+                    return Some(p2);
+                }
+            }
+        }
+
+        None
     }
 
     /// Menjalankan worker sidecar Node.js dengan watchdog auto-restart
     pub async fn run_watchdog(&self) {
-        let script = self.worker_script.clone();
+        let token = self.auth_token.clone();
         tokio::spawn(async move {
             loop {
-                println!("[Sidecar Watchdog] Meluncurkan Node.js TikTok Worker: {}", script);
+                let script_path = match Self::resolve_script_path() {
+                    Some(p) => p,
+                    None => {
+                        eprintln!("[Sidecar Watchdog Error] Berkas sidecar/tiktok_worker.js tidak ditemukan.");
+                        sleep(Duration::from_secs(10)).await;
+                        continue;
+                    }
+                };
 
-                let mut child = match Command::new("node")
-                    .arg(&script)
+                println!("[Sidecar Watchdog] Meluncurkan Node.js TikTok Worker: {:?}", script_path);
+
+                let mut cmd = Command::new("node");
+                cmd.arg(&script_path)
+                    .env("ZOVER_WORKER_TOKEN", &token)
+                    .env("ZOVER_HUB_WS", format!("ws://127.0.0.1:8765/api/worker/tiktok?token={}", token))
                     .stdout(Stdio::inherit())
-                    .stderr(Stdio::inherit())
-                    .spawn()
-                {
+                    .stderr(Stdio::inherit());
+
+                let mut child = match cmd.spawn() {
                     Ok(child) => child,
                     Err(err) => {
                         eprintln!("[Sidecar Watchdog Error] Gagal mengeksekusi node: {}. Pastikan Node.js terinstal.", err);
@@ -35,7 +75,6 @@ impl SidecarManager {
                     }
                 };
 
-                // Tunggu jika proses anak mati
                 let status = child.wait().await;
                 eprintln!(
                     "[Sidecar Watchdog] Worker sidecar terhenti dengan status: {:?}. Me-restart dalam 5 detik...",

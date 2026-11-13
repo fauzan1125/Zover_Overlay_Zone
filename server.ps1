@@ -558,10 +558,21 @@ while ($listener.IsListening) {
             continue
         }
 
+        # Tolak Windows 8.3 short-name (CONFIG~1.JSO, NODE_M~1) dan trailing dot/space bypass
+        $relPath = $fullPath.Substring($rootFull.Length)
+        if ($urlPath.Contains('~') -or $relPath.Contains('~') -or ($urlPath -match '[. ](\/|\\|$)')) {
+            $response.StatusCode = 404
+            $notFoundBytes = [System.Text.Encoding]::UTF8.GetBytes("<h1>404 Not Found</h1>")
+            $response.OutputStream.Write($notFoundBytes, 0, $notFoundBytes.Length)
+            $response.Close()
+            continue
+        }
+
         # Token config and server scripts must not be served raw through static routing.
+        $cleanFileName = [System.IO.Path]::GetFileName($fullPath).TrimEnd(' ', '.')
         $lowerUrl = $urlPath.ToLower()
-        $fileName = [System.IO.Path]::GetFileName($filePath).ToLower()
-        $fileExt = [System.IO.Path]::GetExtension($filePath).ToLower()
+        $fileName = $cleanFileName.ToLower()
+        $fileExt = [System.IO.Path]::GetExtension($cleanFileName).ToLower()
         $blockedExts = @('.ps1', '.bat', '.cmd', '.key', '.pem')
         $blockedFiles = @('config.json', 'migrasi_zover.txt', 'prd_update_zover.txt', 'update_zover_prd.txt')
 

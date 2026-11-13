@@ -56,14 +56,26 @@ namespace ZoVerDesktop
             appMutex = new Mutex(true, "ZoVer_SingleInstance_Mutex_953D", out createdNew);
             if (!createdNew)
             {
-                MessageBox.Show("ZoVer sudah berjalan di latar belakang!\nPeriksa ikon ZoVer di dekat jam (System Tray).", 
-                                "ZoVer", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                // Jika ZoVer sudah berjalan, fokuskan jendela dashboard yang aktif tanpa memunculkan dialog popup
+                IntPtr existingHwnd = FindZoVerWindow();
+                if (existingHwnd != IntPtr.Zero && IsWindow(existingHwnd))
+                {
+                    ShowWindow(existingHwnd, SW_RESTORE);
+                    SetForegroundWindow(existingHwnd);
+                }
+                else
+                {
+                    OpenDashboardApp();
+                }
                 return;
             }
 
             appDirectory = AppDomain.CurrentDomain.BaseDirectory;
             Directory.SetCurrentDirectory(appDirectory);
 
+            AppDomain.CurrentDomain.UnhandledException += (s, e) => {
+                try { File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "zover_crash.log"), e.ExceptionObject.ToString()); } catch {}
+            };
             AppDomain.CurrentDomain.ProcessExit += (s, e) => ExitApplication();
             Application.ApplicationExit += (s, e) => ExitApplication();
 
@@ -72,7 +84,7 @@ namespace ZoVerDesktop
             OpenDashboardApp();
             StartWindowWatchdog();
 
-            Application.Run();
+            Application.Run(new ApplicationContext());
         }
 
         private static bool IsPortOpen(string host, int port)
@@ -117,13 +129,17 @@ namespace ZoVerDesktop
                 return; // Server sudah aktif
             }
 
-            string nodePath = FindNodeExecutable();
-            if (!string.IsNullOrEmpty(nodePath) && File.Exists(Path.Combine(appDirectory, "server.js")))
+            string binRustExe = Path.Combine(appDirectory, "bin", "zover_engine.exe");
+            string localRustExe = Path.Combine(appDirectory, "zover_engine.exe");
+            string nestedRustExe = Path.Combine(appDirectory, "zover-core", "target", "release", "zover.exe");
+            string targetRustExe = File.Exists(binRustExe) ? binRustExe : (File.Exists(localRustExe) ? localRustExe : (File.Exists(nestedRustExe) ? nestedRustExe : null));
+
+            if (!string.IsNullOrEmpty(targetRustExe))
             {
                 var psi = new ProcessStartInfo
                 {
-                    FileName = nodePath,
-                    Arguments = "\"" + Path.Combine(appDirectory, "server.js") + "\"",
+                    FileName = targetRustExe,
+                    Arguments = "--no-browser",
                     WorkingDirectory = appDirectory,
                     CreateNoWindow = true,
                     UseShellExecute = false,
@@ -135,26 +151,47 @@ namespace ZoVerDesktop
                 }
                 catch {}
             }
-            else if (File.Exists(Path.Combine(appDirectory, "server.ps1")))
+            else
             {
-                var psi = new ProcessStartInfo
+                string nodePath = FindNodeExecutable();
+                if (!string.IsNullOrEmpty(nodePath) && File.Exists(Path.Combine(appDirectory, "server.js")))
                 {
-                    FileName = "powershell.exe",
-                    Arguments = "-ExecutionPolicy Bypass -NoProfile -WindowStyle Hidden -File \"" + Path.Combine(appDirectory, "server.ps1") + "\"",
-                    WorkingDirectory = appDirectory,
-                    CreateNoWindow = true,
-                    UseShellExecute = false,
-                    WindowStyle = ProcessWindowStyle.Hidden
-                };
-                try
-                {
-                    serverProcess = Process.Start(psi);
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = nodePath,
+                        Arguments = "\"" + Path.Combine(appDirectory, "server.js") + "\"",
+                        WorkingDirectory = appDirectory,
+                        CreateNoWindow = true,
+                        UseShellExecute = false,
+                        WindowStyle = ProcessWindowStyle.Hidden
+                    };
+                    try
+                    {
+                        serverProcess = Process.Start(psi);
+                    }
+                    catch {}
                 }
-                catch {}
+                else if (File.Exists(Path.Combine(appDirectory, "server.ps1")))
+                {
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = "powershell.exe",
+                        Arguments = "-ExecutionPolicy Bypass -NoProfile -WindowStyle Hidden -File \"" + Path.Combine(appDirectory, "server.ps1") + "\"",
+                        WorkingDirectory = appDirectory,
+                        CreateNoWindow = true,
+                        UseShellExecute = false,
+                        WindowStyle = ProcessWindowStyle.Hidden
+                    };
+                    try
+                    {
+                        serverProcess = Process.Start(psi);
+                    }
+                    catch {}
+                }
             }
 
-            // Tunggu hingga server siap (maksimal 5 detik)
-            for (int i = 0; i < 25; i++)
+            // Tunggu hingga server siap (maksimal 6 detik)
+            for (int i = 0; i < 30; i++)
             {
                 if (IsPortOpen("127.0.0.1", 8765)) break;
                 Thread.Sleep(200);
@@ -195,6 +232,13 @@ namespace ZoVerDesktop
                     return;
                 }
                 catch {}
+            }
+
+            // Tunggu hingga port 8765 benar-benar listening agar browser tidak menampilkan ERR_CONNECTION_REFUSED
+            for (int i = 0; i < 25; i++)
+            {
+                if (IsPortOpen("127.0.0.1", 8765)) break;
+                Thread.Sleep(150);
             }
 
             string browser = FindBrowserPath();
@@ -260,31 +304,14 @@ namespace ZoVerDesktop
         {
             new Thread(() =>
             {
-                IntPtr zoVerHwnd = IntPtr.Zero;
-
-                // 1. Tunggu jendela ZoVer muncul
-                while (zoVerHwnd == IntPtr.Zero && !isExiting)
+                while (!isExiting)
                 {
-                    zoVerHwnd = FindZoVerWindow();
-                    if (zoVerHwnd != IntPtr.Zero) break;
-                    Thread.Sleep(500);
+                    if (trackedWindowHwnd == IntPtr.Zero || !IsWindow(trackedWindowHwnd))
+                    {
+                        trackedWindowHwnd = FindZoVerWindow();
+                    }
+                    Thread.Sleep(1000);
                 }
-
-                if (isExiting) return;
-                trackedWindowHwnd = zoVerHwnd;
-
-                // 2. Pantau status window:
-                // - Jika Minimize [-]: IsWindow(zoVerHwnd) tetap TRUE -> server TETAP HIDUP dan streaming normal.
-                // - Jika Close [X]: IsWindow(zoVerHwnd) menjadi FALSE -> matikan seluruh server dan stop aplikasi!
-                while (IsWindow(zoVerHwnd) && !isExiting)
-                {
-                    Thread.Sleep(500);
-                }
-
-                if (isExiting) return;
-
-                // Pengguna menekan tombol [X] untuk menutup jendela
-                ExitApplication();
             }) { IsBackground = true }.Start();
         }
 

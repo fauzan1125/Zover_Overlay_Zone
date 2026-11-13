@@ -46,12 +46,19 @@ update_zover_prd.txt
 *.prd
 migrasi_zover*.txt
 
+# Rust target directories and debug symbols
+**/target/
+*.pdb
+zover.exe
+
+# Installer output and Inno Setup artifacts
+installer_output/
+Output/
+*.is-tmp
+*.iss.bak
+
 # Transient scratch audio and local test dumps
 test.mp3
-test2.mp3
-
-# Rust target directories
-**/target/
 test2.mp3
 test_*.mp3
 brave_out.txt
