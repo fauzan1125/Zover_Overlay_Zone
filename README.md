@@ -1,163 +1,137 @@
-# 🎙️ ZoVer (Zone Overlay)
+# 🎙️ ZoVer (Zone Overlay) v3.0
 
-**Gabungan live chat Kick + YouTube + TikTok dalam satu OBS Browser Source, dengan pembaca komentar otomatis "Mbak Google" berbahasa Indonesia.**
+**Live Chat Aggregator & Stream Alert Hub (Kick + YouTube + TikTok) dengan Pembaca Komentar Otomatis "Mbak Google" Indonesia.**
 
-Aplikasi web ringan (vanilla JavaScript, tanpa build tool) yang berjalan **100% lokal** di PC Anda melalui server lokal Node.js (dengan fallback PowerShell). Cocok untuk streamer multi-platform yang ingin semua komentar penonton tampil rapi di siaran dan dibacakan dengan suara.
+ZoVer adalah aplikasi live streaming overlay multi-platform yang menyatukan obrolan, dynamic alert, viewer counter, running text, soundboard, dan text-to-speech (TTS) ke dalam satu ekosistem OBS Studio.
 
-> **Catatan Koneksi Internet**: Dashboard kontrol (`index.html`) memerlukan koneksi internet untuk memuat pustaka CDN (Google Fonts, Bootstrap Icons, Material Symbols). Tampilan overlay OBS (`overlay_*.html`) dirancang mandiri dan tidak membutuhkan aset CDN tersebut.
-
----
-
-## ✨ Fitur
-
-- **3 Platform sekaligus**: Kick, YouTube, dan TikTok dalam satu overlay.
-- **YouTube Multi-Live**: dukung beberapa link live sekaligus (mis. stream *portrait* + *landscape*) — semua komentar terbaca.
-- **TTS "Mbak Google"**: pembaca komentar Bahasa Indonesia bersuara perempuan dengan antrean, serta pengaturan volume/kecepatan/pitch.
-- **Template pembacaan**: sebut username dan platform, mis. `{user} from {platform} berkata {message}`.
-- **Filter pintar**: spam simbol seperti `@@@@` dibuang agar tidak dibaca aneh, tetapi mention `@username` tetap utuh; plus blacklist kata kasar.
-- **5 tema overlay OBS** + animasi masuk + auto-hide + ukuran teks dapat diatur.
-- **Dashboard premium** (Bootstrap 5) dengan pratinjau overlay real-time dan log/konsol aktivitas.
-- **Bar ViewCount 3 Platform**: pill transparan + blur (glassmorphism) di atas overlay yang menampilkan jumlah penonton TikTok / YouTube / Kick, dengan pilihan platform mana saja yang ditampilkan.
-- **Overlay Alert & Soundboard Terpisah (`overlay_alert.html`)**:
-  - Alert Subscriber YouTube
-  - Alert Subscriber & Gifting Kick
-  - Alert Follower TikTok
-  - Alert Gift TikTok (menampilkan nama hadiah & jumlah combo)
-  - Alert Tap-Tap TikTok tiap kelipatan 100 like
-  - Kotak Media ("TEMPAT GIFT") di tengah dengan dukungan upload file **MP4 / WebM / GIF** atau link URL.
-  - Soundboard Audio Alert yang bisa diatur per event dengan upload **MP3** atau link audio.
-  - Pengaturan durasi tayang alert & antrean (FIFO queue) agar tidak saling tumpuk saat spam subs/gifts.
-- **Sinkronisasi antar-jendela**: dashboard dan overlay OBS selalu selaras (BroadcastChannel + localStorage + config lokal).
+Dibangun dengan **Arsitektur Hybrid v3.0**: **Rust Core Engine (Axum + Tokio)** sebagai server utama berkemampuan tinggi, ultra-ringan, dan stabil, dipadukan dengan **Node.js Sidecar Worker** terisolasi khusus untuk ingestion TikTok Live.
 
 ---
 
-## 🧩 Syarat Sistem
+## ✨ Fitur Unggulan
 
-| Komponen | Keterangan |
+- **🚀 Native Single Executable (`ZoVer.exe`)**:
+  - Berjalan 100% lokal tanpa perlu membuka jendela terminal hitam Command Prompt (`.bat`).
+  - Terintegrasi langsung dengan Windows System Tray (dekat jam) untuk kontrol cepat, restart, dan salin link OBS.
+  - Konsumsi memori ultra-ringan saat idle ($\le 25\text{ MB}$) dan latensi loopback $< 1\text{ ms}$.
+- **💬 Agregator 3 Platform Sekaligus**:
+  - **Kick Live**: Terhubung langsung ke Kick Pusher WebSocket.
+  - **YouTube Live**: Mendukung **Multi-Live** sekaligus (misal stream portrait + landscape bersamaan).
+  - **TikTok Live**: Deteksi chat, follower baru, hadiah gift combo beruntun, tap-tap like milestone kelipatan 100, dan statistik viewer realtime.
+- **🗣️ TTS "Mbak Google" Indonesia (Zero Ghost Bug)**:
+  - 100% suara perempuan Bahasa Indonesia jernih (Anti-Andika, Anti-Macet).
+  - Dilengkapi **BroadcastChannel Tab Killer** & antrean serial (FIFO) berdasar event `onend` sehingga tidak pernah terjadi suara dobel saat OBS di-refresh.
+  - Template pembacaan kustom: `{user} from {platform} berkata {message}`.
+  - Filter cerdas: Membersihkan spam simbol (seperti `@@@@`) khusus untuk suara tanpa merusak teks asli di layar.
+- **🎨 Koleksi Widget OBS Mandiri (Browser Source)**:
+  - **`overlay_chat.html`**: Chatbox overlay transparan dengan 5 tema (Gamer Neon, Cyberpunk, Glassmorphic, Minimal, Bubble).
+  - **`overlay_alert.html`**: Animasi alert subs/gifts/follow dengan media (MP4/WebM/GIF) dan soundboard audio MP3.
+  - **`overlay_chalert.html`**: Widget inovatif ala *Dynamic Island* yang menggabungkan Chat + Alert dalam satu kapsul animasi Apple-spring.
+  - **`overlay_viewcount.html`**: Bar pill viewcount gabungan Kick + YouTube + TikTok transparan blur.
+  - **`overlay_running_text.html`**: Teks berjalan 3D flip vertikal untuk promosi, subathon, atau info sosmed streamer.
+- **🔒 Keamanan Tingkat Tinggi**:
+  - Binding ketat ke loopback IPv4 `127.0.0.1:8765` (anti-DNS rebinding).
+  - Proteksi penuh terhadap path traversal dan Windows 8.3 Short Filename bypass (`CONFIG~1.JSO`).
+  - Autentikasi internal token lokal antara Rust Core dan worker sidecar.
+
+---
+
+## 🧩 Kebutuhan Sistem
+
+| Komponen | Spesifikasi |
 |---|---|
-| OS | Windows 10/11 |
-| Node.js | LTS (v18+ atau v20+). Otomatis dipasang oleh `START_SERVER.bat` jika belum ada |
-| Browser | Chrome / Edge modern (untuk dashboard & TTS) |
-| OBS Studio | Opsional, untuk menampilkan overlay |
-| TikTok Bridge | **Tidak perlu lagi IndoFinity / TikFinity** (Konektor bawaan Native Direct terintegrasi) |
-| Koneksi Internet | Diperlukan oleh dashboard untuk CDN (font & ikon). Overlay OBS berjalan tanpa CDN |
+| **Sistem Operasi** | Windows 10 / 11 (64-bit) |
+| **Biner Utama** | `ZoVer.exe` (Portabel, tanpa perlu compile) |
+| **Node.js Runtime** | Node.js LTS (v18+ / v20+) — Diperlukan untuk worker TikTok Live |
+| **Browser / OBS** | OBS Studio v28+ (CEF Browser Source) & Chrome / Edge modern |
 
 ---
 
-## 📥 Cara Install & Menjalankan (dari GitHub)
+## 📥 Cara Menjalankan
 
-1. **Clone atau Download** repository ini (`git clone https://github.com/...` atau klik **Code → Download ZIP** lalu ekstrak).
-2. **Double-click `ZoVer.exe`** (Aplikasi Desktop Windows mandiri).
-   - Server berjalan otomatis secara hening di balik layar tanpa jendela hitam Command Prompt.
-   - Jendela Dashboard ZoVer langsung terbuka seperti aplikasi desktop TikFinity/IndoFinity.
-   - Ikon ZoVer akan muncul di dekat jam (System Tray) untuk kontrol cepat dan salin link OBS instan.
-   *(Alternatif manual: Anda juga tetap bisa menggunakan `START_SERVER.bat`)*
-3. Isi username platform pada menu **Koneksi Stream**, lalu klik **Hubungkan**.
-5. (Opsional) Untuk OBS Studio: klik tombol **"Salin Link OBS"** untuk Chatbox, ViewCount, Alert, atau Chalert, lalu tempel sebagai Browser Source di OBS.
-
----
-
-## 🔌 Koneksi Platform
-
-### Kick
-Isi username/channel handle, klik **Hubungkan**. Terhubung langsung ke Kick Pusher WebSocket.
-
-### YouTube (dukung Multi-Live)
-Isi **satu atau beberapa** URL/Video ID live, dipisah **koma / spasi / enter**:
-
-```
-https://www.youtube.com/watch?v=ID_PORTRAIT, https://www.youtube.com/watch?v=ID_LANDSCAPE
-```
-
-- Tanpa API Key → memakai **Scraper Mode** via server lokal (wajib jalankan `START_SERVER.bat`).
-- Dengan API Key (opsional) → memakai **YouTube Data API v3**.
-
-### TikTok Live (Native Direct)
-1. Masukkan `@username` TikTok Anda di kolom input.
-2. Kolom Token / Session ID bersifat opsional (dapat dikosongkan).
-3. Klik **Hubungkan**.
-4. Chat, Gift, Like tap-tap per 100, Follower alert, dan Viewcount langsung terbaca secara instan tanpa membutuhkan aplikasi pihak ketiga seperti IndoFinity atau TikFinity.
+### Cara Cepat (Rekomendasi)
+1. **Unduh / Clone** repository ini.
+2. Pastikan dependensi Node.js terpasang dengan menjalankan `npm install` (cukup sekali di awal).
+3. **Klik ganda `ZoVer.exe`**.
+   - Server Rust Core otomatis aktif di latar belakang pada `http://127.0.0.1:8765`.
+   - Dashboard kontrol langsung terbuka otomatis di browser Anda.
+   - Ikon ZoVer akan muncul di System Tray Windows untuk kontrol cepat.
+4. Masukkan username channel Anda di menu **Koneksi Stream**, lalu klik **Hubungkan**.
+5. Klik **"Salin Link OBS"** pada widget yang diinginkan dan tempelkan sebagai Browser Source di OBS Studio.
 
 ---
 
-## 🗣️ Pengaturan Suara (TTS)
+## 🗂️ Struktur Proyek
 
-- **Format Pembacaan Pesan** mendukung variabel:
-  - `{user}` → nama pengirim
-  - `{message}` → isi komentar
-  - `{platform}` → YouTube / Kick / TikTok
-  - Contoh: `{user} from {platform} berkata {message}` → *"ardiaz from YouTube berkata halo"*
-- **Filter Kata Kasar**: komentar yang mengandung kata dalam daftar tidak dibacakan.
-- Spam simbol (mis. `@@@@`) otomatis dibersihkan **hanya untuk suara**; tampilan overlay tetap menampilkan pesan asli.
-
----
-
-## 🎨 Tampilan Overlay OBS
-
-- Pilih dari 5 tema: Gamer Neon, Cyberpunk Dark, Glassmorphic Glow, Minimal Floating, Bubble Chat.
-- Atur ukuran teks, animasi masuk, dan durasi auto-hide (0 = tampil selamanya).
-- Overlay dirancang **transparan** agar menyatu dengan scene OBS.
-
-## 👁️ Bar ViewCount (Penonton Live)
-
-- Bar pill **transparan + blur** tampil sebagai **Browser Source terpisah** (`overlay_viewcount.html`), mis. `TikTok Views: 12  YouTube Views: 34  Kick Views: 5` — tidak digabung dengan overlay chat agar tata letak bebas diatur.
-- Aktif/nonaktifkan lewat switch **"Aktifkan Bar ViewCount"**, dan centang platform mana saja yang ingin ditampilkan (Kick / YouTube / TikTok).
-- Angka diambil **best-effort** tiap ±30 detik via server lokal: YouTube menjumlahkan semua live pada kolom multi-live; Kick & TikTok membaca halaman channel/live masing-masing.
-- Membutuhkan `START_SERVER.bat` berjalan dan username/link platform sudah terisi.
-
----
-
-## 🗂️ Struktur Folder
-
-```
-├── START_SERVER.bat        # Launcher otomatis server lokal (Node.js auto-detect)
-├── STOP_SERVER.bat         # Tombol 1-klik untuk mematikan server lokal
-├── server.js               # Server lokal Node.js + WebSocket TikTok Native + Scraper Proxy
-├── package.json            # Dependensi Node.js (tiktok-live-connector & ws)
-├── index.html              # Dashboard kontrol & konfigurasi (Bootstrap 5)
-├── overlay_chat.html       # Halaman transparan OBS untuk kartu live chat
-├── overlay_viewcount.html  # Halaman transparan OBS untuk bar viewcount (terpisah)
-├── overlay_alert.html      # Halaman transparan OBS untuk alert & soundboard
-├── overlay_chalert.html    # Halaman gabungan Chat + Alert
-├── config.example.json     # Template konfigurasi referensi
-├── css/
-│   ├── styles.css          # Tema overlay & kartu chat
-│   └── dashboard.css       # Tema slate dashboard
-├── logo_platform/
-│   ├── kick.png            # Logo Kick
-│   ├── youtube.png         # Logo YouTube
-│   └── tiktok.jpg          # Logo TikTok
-└── js/
-    ├── app.js              # Controller utama & sinkronisasi
-    ├── overlay.js          # Renderer overlay chat
-    ├── tts.js              # Mesin TTS Mbak Google
-    ├── viewcount.js        # Monitor & bar viewcount 3 platform
-    └── connectors/
-        ├── kick.js         # Konektor Kick (Pusher WebSocket)
-        ├── youtube.js      # Konektor YouTube (multi-live scraper & API)
-        └── tiktok.js       # Konektor TikTok (Native Direct WebSocket)
+```text
+chat_yt_kick_tiktok/
+├── ZoVer.exe               # Launcher desktop Windows (System Tray)
+├── bin/
+│   └── zover_engine.exe    # Biner Rust Core Engine (di-embed aset web/)
+├── src_launcher/
+│   └── ZoVerApp.cs         # Source C# Windows Forms System Tray Launcher
+├── config.example.json     # Template konfigurasi awal
+├── config.json             # File konfigurasi pengguna (lokal, diabaikan git)
+├── server.js               # Server Node.js alternatif
+├── server.ps1              # Server PowerShell alternatif
+├── package.json            # Manifest dependensi & skrip test
+│
+├── zover-core/             # Sumber Engine Utama (Rust Axum + Tokio)
+│   ├── Cargo.toml          # Konfigurasi dependensi & profile release LTO
+│   └── src/
+│       ├── main.rs         # Entry point Axum & rust-embed
+│       ├── api.rs          # REST API (/api/config, /api/events, /proxy, /api/upload)
+│       ├── ws_hub.rs       # Tokio Broadcast Hub & Token Worker Auth
+│       └── sidecar_manager.rs # Dynamic supervisor untuk worker TikTok
+│
+├── sidecar/
+│   └── tiktok_worker.js    # Worker TikTok Live (tiklive open-source, tanpa EulerStream)
+│
+├── web/                    # Seluruh Frontend (Di-embed ke dalam ZoVer.exe)
+│   ├── index.html          # Dashboard kontrol utama
+│   ├── overlay_chat.html   # Widget live chatbox
+│   ├── overlay_alert.html  # Widget media & soundboard alert
+│   ├── overlay_chalert.html # Widget dynamic island chat+alert
+│   ├── overlay_viewcount.html # Widget counter penonton
+│   ├── overlay_running_text.html # Widget banner running text
+│   ├── css/                # Stylesheet tema dan animasi
+│   ├── js/                 # Logika widget client & mesin TTS
+│   ├── logo_platform/      # Asset logo platform streaming
+│   └── media/              # Audio & video alert lokal
+│
+├── installer/
+│   └── zover_setup.iss     # Skrip Windows Installer (Inno Setup)
+│
+└── tests/                  # Test suite pengujian otomatis
+    ├── test_server.ps1     # 52 unit test logika server & keamanan
+    ├── test_server_security.js # 8 unit test proteksi Windows 8.3 & traversal
+    ├── test_suite.html     # Test runner visual browser
+    └── run_tests.bat       # Script runner lokal developer
 ```
 
 ---
 
-## 🔐 Keamanan & Privasi
+## 🧪 Menjalankan Pengujian (Testing)
 
-- Server **hanya bind ke `localhost` / `127.0.0.1`** — tidak terjangkau dari internet.
-- Endpoint server dikunci **same-origin** (menolak request lintas-origin/CSRF), proxy dibatasi ke host YouTube (anti-SSRF), dan ada proteksi path-traversal.
+Untuk memverifikasi keutuhan logika server, proteksi keamanan, dan konektor:
+
+```bash
+npm test
+```
+
+Perintah di atas akan mengeksekusi:
+1. **PowerShell Test Suite**: 52 pengujian mencakup MIME types, SSRF whitelist, path traversal, origin guards, dan schema konfigurasi.
+2. **Security Test Suite**: 8 pengujian eksklusif keamanan file Windows 8.3 (`CONFIG~1.JSO`, `/NODE_M~1/`, trailing dot & space).
 
 ---
 
-## 🛠️ Troubleshooting
+## 🛠️ Tips Penggunaan di OBS Studio
 
-| Masalah | Solusi |
-|---|---|
-| YouTube tidak terhubung | Pastikan `START_SERVER.bat` masih terbuka (Scraper Mode butuh server lokal). |
-| TikTok tidak terhubung | Pastikan akun sedang LIVE di TikTok, username sesuai (tanpa spasi/@), dan server aktif via `START_SERVER.bat`. Kolom token biarkan kosong. |
-| Suara tidak keluar | Browser memblokir autoplay hingga ada 1 interaksi — klik sekali pada halaman dashboard/overlay. |
-| Overlay kosong di OBS | Pastikan path Browser Source mengarah ke `overlay_chat.html` / `overlay_viewcount.html` dari server lokal, dan server masih berjalan. |
+1. **Scene Gameplay**: Gunakan opsi **"Add Existing"** saat memasang widget ke scene lain. Matikan centang *"Shutdown source when not visible"* dan *"Refresh browser when scene becomes active"* agar koneksi chat dan antrean suara tidak terputus.
+2. **Audio Monitoring**: Jika ingin mendengar suara TTS langsung di headset Anda saat streaming, pastikan browser dashboard tetap terbuka di background atau aktifkan Audio Monitoring pada Browser Source OBS.
 
 ---
 
 ## 📄 Lisensi
 
-Didistribusikan di bawah lisensi open source [MIT License](LICENSE). Silakan gunakan dan modifikasi untuk keperluan streaming Anda.
+Didistribusikan di bawah lisensi open source [MIT License](LICENSE). Bebas digunakan dan dimodifikasi untuk kebutuhan live streaming Anda.

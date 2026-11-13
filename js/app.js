@@ -240,7 +240,7 @@ class Application {
       const stage = document.getElementById('chalertStage');
       const island = document.getElementById('chalertIsland');
       if (island) {
-        this.chalertWidget = new ChalertWidget(Object.assign({}, this.config.chalert || {}, { disableSync: true }));
+        this.chalertWidget = new ChalertWidget(Object.assign({}, this.config.chalert || {}, { disableSync: true, enableServerEvents: true }));
         this.chalertWidget.init({
           stage: stage,
           island: island,
