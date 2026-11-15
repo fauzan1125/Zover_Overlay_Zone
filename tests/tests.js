@@ -150,6 +150,67 @@
     runner.assertEqual('TTS: stop() empties queue and releases playback lock', tts.queue.length, 0);
     runner.assertEqual('TTS: isPlaying reset to false after stop()', tts.isPlaying, false);
 
+    // 1.8 Cross-instance TTS lock persists across busy queue delays (>30s) and matches content fingerprint across distinct IDs
+    localStorage.clear();
+    const ttsA = new MbakGoogleTTS();
+    const ttsB = new MbakGoogleTTS();
+    ttsA.playNext = function () {};
+    ttsB.playNext = function () {};
+    ttsA.speakMessage({ id: 'msg-win-a', platform: 'tiktok', username: 'Rina', message: 'Halo saat lagi rame banget' });
+    // Simulate 30 seconds of queue delay before second window/instance processes the same comment with a different ID
+    const fpLockKey = Array.from(Object.keys(localStorage._data || {})).find(k => k.startsWith('zover_tts_lock_'));
+    if (fpLockKey) {
+      localStorage.setItem(fpLockKey, String(Date.now() - 30000));
+    }
+    ttsB.speakMessage({ id: 'msg-win-b', platform: 'tiktok', username: 'Rina', message: 'Halo saat lagi rame banget' });
+    runner.assertEqual('TTS: Second instance blocked from speaking same comment even after 30s queue delay with different ID', ttsB.queue.length, 0);
+
+    // 1.9 Watchdog force-finish cancels speechSynthesis to prevent overlapping voice
+    let cancelCalledOnWatchdog = false;
+    const ttsWatch = new MbakGoogleTTS();
+    ttsWatch.selectedVoice = { name: 'Google Bahasa Indonesia', lang: 'id-ID' };
+    ttsWatch.synth = {
+      speaking: false,
+      speak() {},
+      cancel() { cancelCalledOnWatchdog = true; }
+    };
+    const origSetTimeout = global.setTimeout;
+    let capturedWatchdogCb = null;
+    global.setTimeout = (cb, ms) => {
+      if (ms >= 10000 && !capturedWatchdogCb) {
+        capturedWatchdogCb = cb;
+        return 999;
+      }
+      return origSetTimeout(cb, ms);
+    };
+    ttsWatch.speakWithSpeechSynthesis('Kalimat uji watchdog macet');
+    global.setTimeout = origSetTimeout;
+    if (capturedWatchdogCb) capturedWatchdogCb();
+    runner.assert('TTS: Watchdog force-finish calls synth.cancel() to prevent overlapping speech', cancelCalledOnWatchdog);
+    ttsWatch.stop();
+
+    // 1.10 Repeated isTest simulation clicks with identical text but new IDs are not blocked by 60s fingerprint lock
+    const ttsSim = new MbakGoogleTTS();
+    ttsSim.playNext = () => {};
+    ttsSim.speakMessage({ id: 'sim_1', platform: 'kick', username: 'KickGamer', message: 'GGWP Bang!', isTest: true });
+    ttsSim.speakMessage({ id: 'sim_2', platform: 'kick', username: 'KickGamer', message: 'GGWP Bang!', isTest: true });
+    runner.assertEqual('TTS: Repeated isTest simulation clicks with new IDs are both enqueued', ttsSim.queue.length, 2);
+    ttsSim.stop();
+
+    // 1.11 Server-side atomic claim rejection aborts duplicate playback before calling online TTS
+    const ttsClaim = new MbakGoogleTTS();
+    let onlineAudioCalls = 0;
+    ttsClaim.selectedVoice = null;
+    ttsClaim.shouldUseServerClaim = () => true;
+    ttsClaim.claimServerAudio = () => ({
+      then(cb) { cb(false); }
+    });
+    ttsClaim.speakWithOnlineAudio = () => { onlineAudioCalls++; };
+    ttsClaim.speakMessage({ id: 'claim_dup_1', platform: 'tiktok', username: 'lazuri', message: 'oke' });
+    runner.assertEqual('TTS: Server claim rejection prevents duplicate online TTS request', onlineAudioCalls, 0);
+    runner.assertEqual('TTS: Server claim rejection resets isPlaying lock', ttsClaim.isPlaying, false);
+    ttsClaim.stop();
+
     tts.stop();
     console.groupEnd();
   }
@@ -529,6 +590,56 @@
     connector.disconnect();
     runner.assertEqual('TikTok: Disconnect resets viewcount to 0', receivedViewCount, 0);
 
+    // 6.8 Like Alert Only on Milestone (100), Never on 1-Like or Sub-100 Bursts
+    receivedAlert = null;
+    connector.accumulatedLikes = 0;
+    connector.lastLikeMilestone = 0;
+    connector.lastLikeAlertTime = 0;
+    connector.setMilestoneStep(100);
+
+    const origSetTimeout = global.setTimeout;
+    const pendingLikeTimers = [];
+    global.setTimeout = (cb, ms) => {
+      if (ms === 2000) {
+        pendingLikeTimers.push(cb);
+        return 777;
+      }
+      return origSetTimeout(cb, ms);
+    };
+
+    connector.processLikeEvent({ uniqueId: 'tapper1', nickname: 'Tapper 1', likeCount: 1 });
+    connector.processLikeEvent({ uniqueId: 'tapper2', nickname: 'Tapper 2', likeCount: 15 });
+    connector.processLikeEvent({ uniqueId: 'tapper1', nickname: 'Tapper 1', likeCount: 40 });
+    pendingLikeTimers.forEach(cb => cb());
+    global.setTimeout = origSetTimeout;
+
+    runner.assertEqual('TikTok: Likes below 100 (1, 15, 40 = 56 total) never trigger alert even after burst window', receivedAlert, null);
+    runner.assertEqual('TikTok: No unbounded userLikeBursts map created', connector.userLikeBursts, undefined);
+
+    // 6.9 Reaching 100 Likes Triggers Milestone Alert With Deterministic ID
+    connector.processLikeEvent({ uniqueId: 'tapper3', nickname: 'Tapper 3', likeCount: 44 });
+    runner.assert('TikTok: Reaching 100 total likes triggers milestone alert', !!receivedAlert);
+    runner.assertEqual('TikTok: Milestone alert count is 100', receivedAlert?.count, 100);
+    runner.assert('TikTok: Milestone alert includes deterministic id', typeof receivedAlert?.id === 'string' && receivedAlert.id.length > 0);
+
+    // 6.10 Bounded seenFollowers Set (prevents unbounded growth during long streams)
+    for (let i = 0; i < 1100; i++) {
+      connector.processFollowEvent({ uniqueId: `fol_${i}`, nickname: `Follower ${i}` });
+    }
+    runner.assert('TikTok: seenFollowers size is bounded to <= 1000', connector.seenFollowers.size <= 1000);
+
+    // 6.11 Suppress duplicate connected status broadcasts when already connected
+    let connectedStatusCount = 0;
+    connector.isConnected = false;
+    connector.username = 'lazuri1125';
+    connector.onStatus = (st) => {
+      if (st.state === 'connected') connectedStatusCount++;
+    };
+    connector.handleNativePayload({ type: 'status', status: 'connected' });
+    connector.handleNativePayload({ type: 'status', status: 'connected' });
+    runner.assertEqual('TikTok: Duplicate connected status broadcasts are suppressed once connected', connectedStatusCount, 1);
+    connector.disconnect();
+
     console.groupEnd();
   }
 
@@ -663,6 +774,28 @@
     manager.handleIncomingBroadcast(testPayload);
     runner.assertEqual('Alerts: Duplicate alert ID rejected and ignored', manager.queue.length + (manager.isPlaying ? 1 : 0), 1);
 
+    // 8.4 Cross-Overlay Audio Mutex Survives Queue Drift (> 3.5s) During Busy Streams
+    localStorage.clear();
+    let audioPlayCount = 0;
+    audio.play = () => {
+      audioPlayCount++;
+      return Promise.resolve();
+    };
+    const alertItemA = { id: 'alert-busy-1', type: 'tiktok_gift', platform: 'tiktok', user: 'Donatur', gift: 'Rose', count: 10 };
+    manager.playSound('media/alerts/default_alert.mp3', alertItemA);
+    runner.assertEqual('Alerts: First overlay plays alert audio', audioPlayCount, 1);
+
+    // Simulate 15 seconds of queue drift before a second overlay/scene reaches the same alert (even if its ID differed across 3s window)
+    for (const k of Object.keys(localStorage._data || {})) {
+      if (k.startsWith('zover_alert_lock_')) {
+        localStorage.setItem(k, String(Date.now() - 15000));
+      }
+    }
+    const alertItemB = { id: 'alert-busy-2', type: 'tiktok_gift', platform: 'tiktok', user: 'Donatur', gift: 'Rose', count: 10 };
+    manager.playSound('media/alerts/default_alert.mp3', alertItemB);
+    runner.assertEqual('Alerts: Second overlay blocked from playing duplicate alert audio after 15s queue drift', audioPlayCount, 1);
+
+    manager.destroy();
     container.remove();
     audio.remove();
     console.groupEnd();
@@ -711,6 +844,39 @@
     runner.assert('App: broadcastRunningTextConfig includes RUNNING_TEXT_CONFIG envelope', sentRtPayload?.type === 'RUNNING_TEXT_CONFIG');
     runner.assert('App: broadcastRunningTextConfig includes settings', !!sentRtPayload?.data?.settings);
     runner.assert('App: broadcastRunningTextConfig includes slides array', Array.isArray(sentRtPayload?.data?.slides));
+
+    // 9.4 Chalert Overlay Mode Does Not Double-Speak Deferred Chat When Alert Is Active
+    const chalertApp = new Application(true, true);
+    let appTtsCount = 0;
+    let widgetTtsCount = 0;
+    chalertApp.tts.speakMessage = () => { appTtsCount++; };
+    if (chalertApp.chalertWidget && chalertApp.chalertWidget.tts && chalertApp.chalertWidget.tts !== chalertApp.tts) {
+      chalertApp.chalertWidget.tts.speakMessage = () => { widgetTtsCount++; };
+    }
+    if (chalertApp.chalertWidget) {
+      runner.assertEqual('App: ChalertWidget shares single MbakGoogleTTS instance with Application', chalertApp.chalertWidget.tts, chalertApp.tts);
+      chalertApp.chalertWidget.currentAlert = { type: 'tiktok_gift', user: 'Sultan' };
+      chalertApp.handleIncomingChat({ id: 'chat-during-alert-1', platform: 'tiktok', username: 'Viewer1', message: 'Halo saat ada alert' }, false);
+      runner.assertEqual('App: Chat arriving during active Chalert alert is spoken immediately by app.tts', appTtsCount, 1);
+      runner.assertEqual('App: Pending chat in ChalertWidget has skipTTS set to true', chalertApp.chalertWidget.pendingChat?.skipTTS, true);
+    }
+
+    // 9.5 triggerChalertSimulation('chat') speaks even when ttsOverlayOnly is true in Dashboard
+    let dashSimTtsCount = 0;
+    app.config.ttsOverlayOnly = true;
+    app.tts.speakMessage = () => { dashSimTtsCount++; };
+    app.triggerChalertSimulation('chat');
+    runner.assertEqual('App: triggerChalertSimulation(chat) speaks in dashboard even when ttsOverlayOnly is true', dashSimTtsCount, 1);
+
+    // 9.6 Overlay mode does not re-broadcast incoming connector chat or alerts
+    let overlayChatBroadcasts = 0;
+    let overlayAlertBroadcasts = 0;
+    chalertApp.broadcastLiveChat = () => { overlayChatBroadcasts++; };
+    chalertApp.broadcastAlert = () => { overlayAlertBroadcasts++; };
+    chalertApp.handleIncomingChat({ id: 'obs-no-echo-chat', platform: 'tiktok', username: 'Viewer2', message: 'Tidak echo' }, false);
+    chalertApp.handleIncomingAlert({ id: 'obs-no-echo-alert', platform: 'tiktok', type: 'tiktok_follow', user: 'Viewer2' }, false);
+    runner.assertEqual('App: Overlay mode does not re-broadcast live chat to other windows', overlayChatBroadcasts, 0);
+    runner.assertEqual('App: Overlay mode does not re-broadcast alerts to other windows', overlayAlertBroadcasts, 0);
 
     logBox.remove();
     console.groupEnd();
@@ -919,6 +1085,7 @@
     runner.assert('Chalert: TTS instance initialized on widget', widget.tts !== null && typeof widget.tts === 'object');
     runner.assertEqual('Chalert: soundVolume option parsed', typeof widget.options.soundVolume, 'number');
 
+    widget.currentAlert = null;
     let ttsSpoke = false;
     const origSpeak = widget.tts.speakMessage;
     widget.tts.speakMessage = () => { ttsSpoke = true; };
@@ -930,6 +1097,44 @@
     widget.currentAlert = null;
     widget.showIdle();
     runner.assert('Chalert: showIdle returns island to state-idle', widget.dom.island.classList.contains('state-idle'));
+
+    // 11.8 Chalert Throttles tiktok_like Queue Flood During Busy Tap-Tap Streams
+    widget.currentAlert = null;
+    widget.alertQueue = [];
+    widget.seenAlertFingerprints.clear();
+    widget.processedAlertIds.clear();
+    widget.handleIncomingAlert({ id: 'like_ms_100', type: 'tiktok_like', platform: 'tiktok', user: 'UserA', count: 100 });
+    widget.handleIncomingAlert({ id: 'like_ms_200', type: 'tiktok_like', platform: 'tiktok', user: 'UserB', count: 200 });
+    widget.handleIncomingAlert({ id: 'like_ms_300', type: 'tiktok_like', platform: 'tiktok', user: 'UserC', count: 300 });
+    runner.assertEqual('Chalert: Does not pile up tiktok_like alerts in queue while one is active', widget.alertQueue.filter(x => x.type === 'tiktok_like').length, 0);
+
+    // 11.9 Chalert Overlay (disableSync: true, isDashboardPreview: false) speaks LIVE_CHAT from /api/events
+    let overlayPollSpoke = 0;
+    const obsChalert = new ChalertWidget({ disableSync: true, enableServerEvents: false });
+    obsChalert.init({
+      stage: fixture.querySelector('#chalertStage'),
+      island: fixture.querySelector('#chalertIsland'),
+      idleView: fixture.querySelector('#islandIdleView'),
+      idleText: fixture.querySelector('#islandIdleText'),
+      cardView: fixture.querySelector('#islandCardView'),
+      avatar: fixture.querySelector('#islandAvatar'),
+      platformBadge: fixture.querySelector('#islandPlatformBadge'),
+      platformImg: fixture.querySelector('#islandPlatformImg'),
+      username: fixture.querySelector('#islandUsername'),
+      tag: fixture.querySelector('#islandTag'),
+      text: fixture.querySelector('#islandText'),
+      highlight: fixture.querySelector('#islandHighlight'),
+      sideIcon: fixture.querySelector('#islandSideIcon'),
+      sideGraphic: fixture.querySelector('#islandSideGraphic')
+    });
+    obsChalert.tts.speakMessage = () => { overlayPollSpoke++; };
+    obsChalert.processServerEvent({
+      id: 'server-uuid-envelope-1',
+      type: 'LIVE_CHAT',
+      timestamp: Date.now(),
+      data: { id: '7707965313736968980', platform: 'tiktok', username: 'lazuri1125', message: 'ngak ada tts' }
+    });
+    runner.assertEqual('Chalert: LIVE_CHAT from /api/events in OBS overlay triggers TTS speakMessage', overlayPollSpoke, 1);
 
     // Teardown
     if (widget.chatHideTimer) clearTimeout(widget.chatHideTimer);

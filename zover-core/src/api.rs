@@ -114,6 +114,44 @@ pub struct EventQuery {
     pub since: Option<u64>,
 }
 
+#[derive(Deserialize)]
+pub struct ClaimQuery {
+    pub key: Option<String>,
+    pub id: Option<String>,
+    pub ttl: Option<u64>,
+}
+
+pub async fn claim_audio(
+    Query(query): Query<ClaimQuery>,
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    let key = query.key.unwrap_or_default();
+    let id_key = query.id.unwrap_or_default();
+    if key.is_empty() && id_key.is_empty() {
+        return Json(json!({ "claimed": true }));
+    }
+
+    let ttl = query.ttl.unwrap_or(60000).clamp(1000, 300000);
+    let now = current_time_millis();
+    let mut claims = state.audio_claims.lock().unwrap();
+    claims.retain(|_, &mut ts| now.saturating_sub(ts) < ttl);
+
+    let already_claimed = (!key.is_empty() && claims.contains_key(&key))
+        || (!id_key.is_empty() && claims.contains_key(&id_key));
+    if already_claimed {
+        return Json(json!({ "claimed": false }));
+    }
+
+    if !key.is_empty() {
+        claims.insert(key, now);
+    }
+    if !id_key.is_empty() {
+        claims.insert(id_key, now);
+    }
+
+    Json(json!({ "claimed": true }))
+}
+
 pub async fn get_events(
     Query(query): Query<EventQuery>,
     State(state): State<Arc<AppState>>,

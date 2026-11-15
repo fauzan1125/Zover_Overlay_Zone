@@ -17,6 +17,7 @@ class MbakGoogleTTS {
     this.blacklistedWords = [];
 
     this.queue = [];
+    this.pendingClaims = [];
     this.isPlaying = false;
     this.currentAudio = null;
     this.recentSpeechFps = new Map();
@@ -44,7 +45,6 @@ class MbakGoogleTTS {
 
       const wantMale = this.gender === 'male';
 
-      // 1. Cari suara yang cocok dengan gender terpilih
       let target = indoVoices.find(v => {
         const n = v.name.toLowerCase();
         return wantMale
@@ -52,7 +52,6 @@ class MbakGoogleTTS {
           : (n.includes('google') || n.match(/female|wanita|perempuan|gadis/));
       });
 
-      // 2. Fallback: hindari suara yang berlawanan dengan gender
       if (!target) {
         target = indoVoices.find(v => wantMale
           ? !v.name.toLowerCase().match(/female|wanita|perempuan|gadis/)
@@ -71,34 +70,43 @@ class MbakGoogleTTS {
   }
 
   updateConfig(settings = {}) {
-    if (settings.enabled !== undefined) {
-      this.enabled = settings.enabled;
+    const enabledVal = settings.enabled !== undefined ? settings.enabled : settings.ttsEnabled;
+    if (enabledVal !== undefined) {
+      this.enabled = enabledVal;
       if (!this.enabled) this.stop();
     }
     // volume 0 itu valid (senyap); `|| 1.0` diam-diam meresetnya jadi full
-    if (settings.volume !== undefined) {
-      const v = parseFloat(settings.volume);
+    const volVal = settings.volume !== undefined ? settings.volume : settings.ttsVolume;
+    if (volVal !== undefined) {
+      const v = parseFloat(volVal);
       if (Number.isFinite(v)) this.volume = v;
     }
-    if (settings.rate !== undefined) {
-      const r = parseFloat(settings.rate);
+    const rateVal = settings.rate !== undefined ? settings.rate : settings.ttsRate;
+    if (rateVal !== undefined) {
+      const r = parseFloat(rateVal);
       if (Number.isFinite(r)) this.rate = r;
     }
-    if (settings.pitch !== undefined) {
-      const p = parseFloat(settings.pitch);
+    const pitchVal = settings.pitch !== undefined ? settings.pitch : settings.ttsPitch;
+    if (pitchVal !== undefined) {
+      const p = parseFloat(pitchVal);
       if (Number.isFinite(p)) this.pitch = p;
     }
-    if (settings.gender !== undefined && settings.gender !== this.gender) {
-      this.gender = settings.gender;
+    const genderVal = settings.gender !== undefined ? settings.gender : settings.ttsGender;
+    if (genderVal !== undefined && genderVal !== this.gender) {
+      this.gender = genderVal;
       if (this._reselectVoice) this._reselectVoice();
     }
-    if (settings.template !== undefined) this.template = settings.template;
-    if (settings.platforms) this.platforms = { ...this.platforms, ...settings.platforms };
-    if (settings.ignoredPrefixes) {
-      this.ignoredPrefixes = Array.isArray(settings.ignoredPrefixes) ? settings.ignoredPrefixes : settings.ignoredPrefixes.split(',').map(s => s.trim()).filter(Boolean);
+    const tplVal = settings.template !== undefined ? settings.template : settings.ttsTemplate;
+    if (tplVal !== undefined) this.template = tplVal;
+    const platVal = settings.platforms || settings.ttsPlatforms;
+    if (platVal) this.platforms = { ...this.platforms, ...platVal };
+    const prefVal = settings.ignoredPrefixes !== undefined ? settings.ignoredPrefixes : settings.ttsIgnoredPrefixes;
+    if (prefVal) {
+      this.ignoredPrefixes = Array.isArray(prefVal) ? prefVal : String(prefVal).split(',').map(s => s.trim()).filter(Boolean);
     }
-    if (settings.blacklistedWords) {
-      this.blacklistedWords = Array.isArray(settings.blacklistedWords) ? settings.blacklistedWords : settings.blacklistedWords.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+    const blVal = settings.blacklistedWords !== undefined ? settings.blacklistedWords : settings.ttsBlacklist;
+    if (blVal !== undefined) {
+      this.blacklistedWords = Array.isArray(blVal) ? blVal : String(blVal).split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
     }
   }
 
@@ -150,27 +158,28 @@ class MbakGoogleTTS {
     // Cross-Scene / Cross-Source Audio Mutex: prevents duplicate processing across open OBS scenes / windows
     const rawUser = chatData.username || chatData.user || 'Viewer';
 
-    // Dedup by content: pesan sama yang masuk lewat dua jalur bisa membawa ID berbeda,
-    // jadi kunci per-ID saja tidak cukup
-    const fp = `${platform}|${String(rawUser).toLowerCase()}|${msg.toLowerCase()}`;
+    // Dedup by content as well as ID in case the same comment arrives through two bridges with distinct IDs.
+    const testSuffix = chatData.isTest && chatData.id ? `|${chatData.id}` : '';
+    const fp = `${platform}|${String(rawUser).toLowerCase()}|${msg.toLowerCase()}${testSuffix}`;
     const now = Date.now();
-    const lastFp = this.recentSpeechFps.get(fp) || 0;
-    if (now - lastFp < 8000) return;
-    this.recentSpeechFps.set(fp, now);
-    if (this.recentSpeechFps.size > 200) {
-      this.recentSpeechFps = new Map(Array.from(this.recentSpeechFps.entries()).slice(-100));
+    for (const [k, ts] of this.recentSpeechFps.entries()) {
+      if (now - ts > 60000) this.recentSpeechFps.delete(k);
     }
+    const lastFp = this.recentSpeechFps.get(fp) || 0;
+    if (now - lastFp < 15000) return;
+    this.recentSpeechFps.set(fp, now);
 
-    const lockKey = `zover_tts_lock_${chatData.id || (platform + '_' + rawUser + '_' + msg.slice(0, 50))}`;
+    const fpKey = `zover_tts_lock_fp_${platform}_${String(rawUser).toLowerCase()}_${msg.toLowerCase().slice(0, 80)}${testSuffix}`;
+    const idKey = chatData.id ? `zover_tts_lock_id_${chatData.id}` : null;
+    const lockTtlMs = 60000;
     try {
-      const existingLock = localStorage.getItem(lockKey);
-      if (existingLock && (now - parseInt(existingLock, 10)) < 25000) {
-        return; // Already claimed or spoken by another window/scene
+      const existingFp = parseInt(localStorage.getItem(fpKey) || '0', 10);
+      const existingId = idKey ? parseInt(localStorage.getItem(idKey) || '0', 10) : 0;
+      if ((existingFp && (now - existingFp) < lockTtlMs) || (existingId && (now - existingId) < lockTtlMs)) {
+        return;
       }
-      localStorage.setItem(lockKey, String(now));
-      setTimeout(() => {
-        try { localStorage.removeItem(lockKey); } catch (_) {}
-      }, 30000);
+      localStorage.setItem(fpKey, String(now));
+      if (idKey) localStorage.setItem(idKey, String(now));
     } catch (_) {}
 
     // Support multiple placeholder occurrences across template
@@ -181,6 +190,11 @@ class MbakGoogleTTS {
 
     // Bersihkan URL agar rapi
     text = text.replace(/(?:https?|ftp):\/\/[\n\S]+/g, 'sebuah tautan');
+
+    this.pendingClaims.push({ text, fpKey, idKey });
+    while (this.pendingClaims.length > 20) {
+      this.pendingClaims.shift();
+    }
 
     this.queue.push(text);
     // suara tidak boleh tertinggal jauh dari live: buang antrean tertua bila membanjir
@@ -238,6 +252,37 @@ class MbakGoogleTTS {
     } catch (_) {}
   }
 
+  shouldUseServerClaim() {
+    return Boolean(
+      typeof window !== 'undefined' &&
+      !window.TestRunner &&
+      typeof fetch === 'function' &&
+      window.location &&
+      /^https?:$/i.test(window.location.protocol || '')
+    );
+  }
+
+  async claimServerAudio(fpKey, idKey) {
+    try {
+      if (typeof window !== 'undefined' && window.__zoverObsInactive) {
+        await new Promise(resolve => setTimeout(resolve, 150));
+      }
+      const origin = (window.location && window.location.origin && window.location.origin !== 'null')
+        ? window.location.origin
+        : 'http://127.0.0.1:8765';
+      const params = new URLSearchParams();
+      if (fpKey) params.set('key', fpKey);
+      if (idKey) params.set('id', idKey);
+      params.set('ttl', '60000');
+      const res = await fetch(`${origin}/api/claim?${params.toString()}`, { cache: 'no-store' });
+      if (res && res.ok) {
+        const data = await res.json();
+        return Boolean(data && data.claimed !== false);
+      }
+    } catch (_) {}
+    return true;
+  }
+
   playNext() {
     if (this.isPlaying || this.queue.length === 0) return;
 
@@ -258,22 +303,46 @@ class MbakGoogleTTS {
     this.isPlaying = true;
     const text = this.queue.shift();
 
-    // Tandai sesi suara global aktif agar browser source lain hening
-    try {
-      localStorage.setItem(activeLockKey, JSON.stringify({
-        instanceId: this.instanceId,
-        startedAt: Date.now()
-      }));
-    } catch (_) {}
+    let claimEntry = null;
+    if (this.pendingClaims && this.pendingClaims.length > 0) {
+      const idx = this.pendingClaims.findIndex(item => item.text === text);
+      if (idx !== -1) {
+        claimEntry = this.pendingClaims.splice(idx, 1)[0];
+      }
+    }
 
-    // Prioritas 1: Jika browser punya voice asli sesuai gender (Chrome / Edge modern)
-    if (this.synth && this.selectedVoice) {
-      this.speakWithSpeechSynthesis(text);
+    const startPlayback = () => {
+      try {
+        localStorage.setItem(activeLockKey, JSON.stringify({
+          instanceId: this.instanceId,
+          startedAt: Date.now()
+        }));
+      } catch (_) {}
+
+      if (this.synth && this.selectedVoice) {
+        this.speakWithSpeechSynthesis(text);
+        return;
+      }
+
+      this.speakWithOnlineAudio(text);
+    };
+
+    if (claimEntry && this.shouldUseServerClaim()) {
+      this.claimServerAudio(claimEntry.fpKey, claimEntry.idKey).then((claimed) => {
+        if (!claimed) {
+          this.clearActiveSession();
+          this.isPlaying = false;
+          if (this.queue.length > 0) {
+            setTimeout(() => this.playNext(), 100);
+          }
+          return;
+        }
+        startPlayback();
+      });
       return;
     }
 
-    // Prioritas 2: Fallback ke Online Audio (Mbak Google Asli)
-    this.speakWithOnlineAudio(text);
+    startPlayback();
   }
 
   speakWithSpeechSynthesis(text) {
@@ -323,11 +392,13 @@ class MbakGoogleTTS {
         }
         this.currentUtterance = null;
 
-        // Jika dibatalkan atau terinterupsi secara sengaja, jangan fallback ke Google Audio
         if (err && (err.error === 'canceled' || err.error === 'interrupted')) {
           this.clearActiveSession();
           this.isPlaying = false;
           hasFinished = true;
+          if (this.queue.length > 0) {
+            setTimeout(() => this.playNext(), 350);
+          }
           return;
         }
 
@@ -337,8 +408,7 @@ class MbakGoogleTTS {
         this.speakWithOnlineAudio(text);
       };
 
-      // Watchdog anti-hang, tapi cek dulu: CEF sering tidak fire onend padahal ucapan masih jalan,
-      // dan finish prematur membuat komentar berikutnya menimpa suara yang sedang berbunyi
+      // CEF sometimes drops onend while speech is still active; extend while speaking, then cancel before advancing.
       const armWatchdog = (delay, retries) => {
         this.speechWatchdog = setTimeout(() => {
           if (hasFinished || this.currentUtterance !== utterance) return;
@@ -347,6 +417,7 @@ class MbakGoogleTTS {
             return;
           }
           console.warn("[TTS] SpeechSynthesis watchdog triggered (force finish).");
+          try { if (this.synth) this.synth.cancel(); } catch (_) {}
           finish();
         }, delay);
       };
@@ -441,6 +512,7 @@ class MbakGoogleTTS {
 
   stop() {
     this.queue = [];
+    this.pendingClaims = [];
     this.isPlaying = false;
     this.clearActiveSession();
     if (this.speechWatchdog) {
@@ -462,6 +534,28 @@ class MbakGoogleTTS {
 
 // Lifecycle Guard: Batalkan Web Speech API saat instance OBS/tab dimuat ulang atau ditutup
 if (typeof window !== 'undefined') {
+  window.__zoverObsInactive = false;
+  try {
+    if (!window.TestRunner && window.location && window.location.protocol === 'http:' && window.location.hostname === 'localhost' && typeof window.location.replace === 'function') {
+      window.location.replace(window.location.href.replace('://localhost', '://127.0.0.1'));
+    }
+  } catch (_) {}
+
+  try {
+    if (window.obsstudio && typeof window.obsstudio.getStatus === 'function') {
+      window.obsstudio.getStatus((status) => {
+        if (status && status.active === false) {
+          window.__zoverObsInactive = true;
+        }
+      });
+    }
+    window.addEventListener('obsSourceActiveChanged', (e) => {
+      if (e && e.detail && typeof e.detail.active === 'boolean') {
+        window.__zoverObsInactive = !e.detail.active;
+      }
+    });
+  } catch (_) {}
+
   try {
     if ('BroadcastChannel' in window) {
       const zoverTabChannel = new BroadcastChannel('zover_tts_channel');

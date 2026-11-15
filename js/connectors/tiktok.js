@@ -34,7 +34,7 @@ class TikTokConnector {
   }
 
   async connect(username, customToken = '') {
-    this.disconnect();
+    this.disconnect(true);
 
     this.username = (username || '').trim().replace(/^@/, '').toLowerCase();
     if (customToken && customToken.trim()) {
@@ -71,6 +71,10 @@ class TikTokConnector {
     } else {
       this.updateStatus('disconnected', `TikTok: Akun @${this.username} offline atau butuh token`);
     }
+
+    if (this.shouldReconnect && this.username) {
+      this.scheduleReconnect();
+    }
   }
 
   connectNativeWebSocket() {
@@ -90,7 +94,7 @@ class TikTokConnector {
             try { ws.close(); } catch (_) {}
             resolve(false);
           }
-        }, 6000);
+        }, 12000);
 
         ws.onopen = () => {
           this.websocket = ws;
@@ -173,8 +177,12 @@ class TikTokConnector {
     switch (payload.type) {
       case 'status':
         if (payload.status === 'connected') {
-          this.updateStatus('connected', `Terhubung (@${this.username})`);
+          if (!this.isConnected) {
+            this.isConnected = true;
+            this.updateStatus('connected', `Terhubung (@${this.username})`);
+          }
         } else if (payload.status === 'disconnected') {
+          this.isConnected = false;
           this.updateStatus('disconnected', 'TikTok Live stream berakhir atau terputus');
           if (typeof this.onViewCount === 'function') {
             this.onViewCount(0);
@@ -242,28 +250,34 @@ class TikTokConnector {
   processGiftEvent(data) {
     if (!data) return;
 
-    // Gift streak handling: combo gifts emit every tap until streak finishes
+    // Combo gifts emit on every tap until the streak ends.
     const isCombo = data.giftType === 1;
     if (isCombo && data.repeatEnd === false) {
       return;
     }
 
     const user = data.nickname || data.uniqueId || 'Penonton';
+    const userKey = String(data.uniqueId || user).trim().toLowerCase();
     const giftName = data.giftName || 'Gift';
     const count = Number(data.repeatCount) || 1;
     const coins = (Number(data.diamondCount) || 0) * count;
     const avatar = data.profilePictureUrl || 'https://www.tiktok.com/favicon.ico';
     const giftIcon = data.giftPictureUrl || '';
 
-    const giftKey = `${user}_${giftName}_${count}_${data.giftId || ''}`;
+    const giftKey = `${userKey}_${giftName}_${count}_${data.giftId || ''}`;
     const now = Date.now();
+    for (const [k, ts] of this.recentGifts.entries()) {
+      if (now - ts > 10000) this.recentGifts.delete(k);
+    }
     const lastTime = this.recentGifts.get(giftKey) || 0;
     if (now - lastTime < 3000) return;
     this.recentGifts.set(giftKey, now);
-    setTimeout(() => this.recentGifts.delete(giftKey), 10000);
+
+    const alertId = data.msgId || data.id || `tt_gift_${giftKey}_${Math.floor(now / 10000)}`;
 
     if (this.onAlert) {
       this.onAlert({
+        id: alertId,
         type: 'tiktok_gift',
         platform: 'tiktok',
         user,
@@ -281,69 +295,29 @@ class TikTokConnector {
 
     const addedLikes = Number(data.likeCount || data.count) || 1;
     const username = data.nickname || data.uniqueId || 'Penonton TikTok';
-    const userKey = String(data.uniqueId || username).trim().toLowerCase();
     const avatar = data.profilePictureUrl || 'https://www.tiktok.com/favicon.ico';
     const now = Date.now();
 
     this.accumulatedLikes += addedLikes;
 
-    // Inisialisasi map user likes burst
-    if (!this.userLikeBursts) this.userLikeBursts = new Map();
-    let userRecord = this.userLikeBursts.get(userKey);
-    if (!userRecord) {
-      userRecord = { count: 0, lastAlertTime: 0, timer: null };
-      this.userLikeBursts.set(userKey, userRecord);
-    }
-    userRecord.count += addedLikes;
-
-    const step = this.milestoneStep || 100;
-
-    // 1. Milestone Global Alert (tiap kelipatan step, default 100 like terkumpul di stream)
+    const step = Math.max(1, this.milestoneStep || 100);
     const currentMilestone = Math.floor(this.accumulatedLikes / step) * step;
+
+    // Emit only on configured milestone multiples (e.g. 100, 200) to prevent per-tap alert floods.
     if (currentMilestone > this.lastLikeMilestone && currentMilestone >= step) {
       this.lastLikeMilestone = currentMilestone;
-
-      if (now - this.lastLikeAlertTime >= 4000) {
-        this.lastLikeAlertTime = now;
-        if (this.onAlert) {
-          this.onAlert({
-            type: 'tiktok_like',
-            platform: 'tiktok',
-            user: username,
-            count: currentMilestone,
-            avatar
-          });
-        }
-        return;
+      this.lastLikeAlertTime = now;
+      if (this.onAlert) {
+        this.onAlert({
+          id: `tt_like_ms_${currentMilestone}`,
+          type: 'tiktok_like',
+          platform: 'tiktok',
+          user: username,
+          count: currentMilestone,
+          avatar
+        });
       }
     }
-
-    // 2. Per-User Tap Alert (Trigger tap-tap interaktif penonton)
-    // Mengumpulkan tap beruntun penonton selama 2 detik sebelum memunculkan alert ucapan terima kasih
-    if (userRecord.timer) clearTimeout(userRecord.timer);
-    userRecord.timer = setTimeout(() => {
-      const burstCount = userRecord.count;
-      userRecord.count = 0;
-      userRecord.timer = null;
-
-      const timeSinceUser = Date.now() - (userRecord.lastAlertTime || 0);
-      const timeSinceGlobal = Date.now() - (this.lastLikeAlertTime || 0);
-
-      if (burstCount >= 1 && timeSinceUser >= 4000 && timeSinceGlobal >= 3000) {
-        userRecord.lastAlertTime = Date.now();
-        this.lastLikeAlertTime = Date.now();
-
-        if (this.onAlert) {
-          this.onAlert({
-            type: 'tiktok_like',
-            platform: 'tiktok',
-            user: username,
-            count: burstCount,
-            avatar
-          });
-        }
-      }
-    }, 2000);
   }
 
   processFollowEvent(data) {
@@ -354,12 +328,17 @@ class TikTokConnector {
     const followKey = (uniqueId || user).toLowerCase();
 
     if (this.seenFollowers.has(followKey)) return;
+    if (this.seenFollowers.size >= 1000) {
+      const oldest = this.seenFollowers.values().next().value;
+      this.seenFollowers.delete(oldest);
+    }
     this.seenFollowers.add(followKey);
 
     const avatar = data.profilePictureUrl || 'https://www.tiktok.com/favicon.ico';
 
     if (this.onAlert) {
       this.onAlert({
+        id: data.msgId || data.id || `tt_follow_${followKey}`,
         type: 'tiktok_follow',
         platform: 'tiktok',
         user,
@@ -498,7 +477,7 @@ class TikTokConnector {
     }, 4000);
   }
 
-  disconnect() {
+  disconnect(silent = false) {
     this.isConnected = false;
     window.tiktokNativeActive = false;
     if (this.reconnectTimer) {
@@ -518,7 +497,9 @@ class TikTokConnector {
       this.onViewCount(0);
     }
     this.seenFollowers.clear();
-    this.updateStatus('disconnected', 'Terputus');
+    if (!silent) {
+      this.updateStatus('disconnected', 'Terputus');
+    }
   }
 
   updateStatus(state, message) {

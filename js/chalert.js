@@ -44,15 +44,16 @@
       this.alertTimer = null;
       this.seenMessageIds = new Set();
       this.seenAlertFingerprints = new Map();
-      this.processedAlertIds = new Set();
+      this.processedAlertIds = new Map();
 
       this.channels = {};
       this.isPollingAttached = false;
       this.isEventsPollingActive = false;
 
-      // TTS Engine & Audio Player initialization
       this.currentAudio = null;
-      if (typeof MbakGoogleTTS !== 'undefined') {
+      if (options.ttsInstance) {
+        this.tts = options.ttsInstance;
+      } else if (typeof MbakGoogleTTS !== 'undefined') {
         this.tts = new MbakGoogleTTS();
       } else if (typeof window !== 'undefined' && window.MbakGoogleTTS) {
         this.tts = new window.MbakGoogleTTS();
@@ -155,7 +156,6 @@
     setupSyncChannels() {
       if (typeof window === 'undefined') return;
 
-      // 1. Live Chat BroadcastChannel (Same as regular Chatbox)
       try {
         this.channels.chat = new BroadcastChannel('chat_overlay_channel');
         this.channels.chat.onmessage = (event) => {
@@ -165,7 +165,6 @@
         };
       } catch (_) {}
 
-      // 2. Alert BroadcastChannel (Same as regular Alert Overlay)
       try {
         this.channels.alert = new BroadcastChannel('zover_alert_channel');
         this.channels.alert.onmessage = (event) => {
@@ -175,7 +174,6 @@
         };
       } catch (_) {}
 
-      // 3. Chalert Simulator & Config Channel
       try {
         this.channels.chalert = new BroadcastChannel('zover_chalert_channel');
         this.channels.chalert.onmessage = (event) => {
@@ -187,7 +185,6 @@
         };
       } catch (_) {}
 
-      // 4. LocalStorage Cross-Window Fallback (100% parity with ZoVer overlay)
       window.addEventListener('storage', (e) => {
         if (e.key === 'chat_overlay_mbak_google_live_chat' && e.newValue) {
           try {
@@ -215,8 +212,38 @@
         }
       });
 
-      // 5. Cross-Process Server Event Bridge for OBS CEF
       this.startServerEventsPolling();
+    }
+
+    processServerEvent(evt) {
+      if (!evt || !evt.type) return;
+      if (evt.timestamp > (this.lastEventTimestamp || 0)) {
+        this.lastEventTimestamp = evt.timestamp;
+      }
+      const evtId = (evt.data && evt.data.id) || evt.id;
+      if (evt.type === 'LIVE_CHAT' && evt.data) {
+        if (evtId && this.seenMessageIds.has(evtId)) return;
+        if (evtId && !evt.data.id) evt.data.id = evtId;
+        if (typeof window !== 'undefined' && window.app && window.app.chalertWidget === this && window.app.seenMessageIds && evtId) {
+          if (window.app.seenMessageIds.has(evtId)) return;
+          window.app.seenMessageIds.add(evtId);
+        }
+        this.handleIncomingChat(evt.data, Boolean(this.options.isDashboardPreview));
+      } else if (evt.type === 'ALERT_TRIGGER' && evt.data) {
+        if (evtId && this.processedAlertIds.has(evtId)) return;
+        if (evtId && !evt.data.id) evt.data.id = evtId;
+        if (typeof window !== 'undefined' && window.app && window.app.chalertWidget === this && window.app.seenAlertIds && evtId) {
+          if (window.app.seenAlertIds.has(evtId)) return;
+          window.app.seenAlertIds.add(evtId);
+        }
+        this.handleIncomingAlert(evt.data);
+      } else if (evt.type === 'CHALERT_EVENT' && (evt.data || evt.payload)) {
+        this.handleDirectChalertPayload(evt.data || evt.payload);
+      } else if (evt.type === 'TEST_TTS') {
+        if (this.tts && typeof this.tts.testVoice === 'function') {
+          this.tts.testVoice();
+        }
+      }
     }
 
     startServerEventsPolling() {
@@ -232,19 +259,7 @@
             const events = await res.json();
             if (Array.isArray(events) && events.length > 0) {
               for (const evt of events) {
-                if (evt.timestamp > this.lastEventTimestamp) {
-                  this.lastEventTimestamp = evt.timestamp;
-                }
-                const evtId = evt.id || (evt.data && evt.data.id);
-                if (evt.type === 'LIVE_CHAT' && evt.data) {
-                  if (evtId && this.seenMessageIds.has(evtId)) continue;
-                  this.handleIncomingChat(evt.data);
-                } else if (evt.type === 'ALERT_TRIGGER' && evt.data) {
-                  if (evtId && this.processedAlertIds.has(evtId)) continue;
-                  this.handleIncomingAlert(evt.data);
-                } else if (evt.type === 'CHALERT_EVENT' && (evt.data || evt.payload)) {
-                  this.handleDirectChalertPayload(evt.data || evt.payload);
-                }
+                this.processServerEvent(evt);
               }
             }
           }
@@ -283,9 +298,6 @@
       return DEFAULT_AVATAR;
     }
 
-    /**
-     * Handle incoming live chat message with zero delay and TTS execution.
-     */
     handleIncomingChat(chatData, skipTTS = false) {
       if (!chatData || !this.options.enabled) return;
 
@@ -301,20 +313,17 @@
         this.seenMessageIds.delete(oldest);
       }
 
-      if (this.options.enableChat === false) return;
-
-      // If a Major Alert is currently active on the island, store as pending
-      if (this.currentAlert) {
-        this.pendingChat = { chatData, skipTTS };
-        return;
-      }
-
-      // 3. Speak with Mbak Google TTS if enabled
       if (!skipTTS && this.options.ttsEnabled !== false && this.tts) {
         this.tts.speakMessage(chatData);
       }
 
-      // 4. Render chat card immediately without any queue delay
+      if (this.options.enableChat === false) return;
+
+      if (this.currentAlert) {
+        this.pendingChat = { chatData, skipTTS: true };
+        return;
+      }
+
       this.renderChatCard({
         platform: (chatData.platform || 'tiktok').toLowerCase(),
         username: rawUser,
@@ -396,9 +405,6 @@
       return {};
     }
 
-    /**
-     * Handle incoming stream alert (Gift, Follow, Like, Sub, Saweria).
-     */
     handleIncomingAlert(alertData) {
       if (!alertData || !this.options.enabled) return;
 
@@ -406,29 +412,33 @@
       const uName = alertData.user || 'Viewer';
       const pName = (alertData.platform || 'tiktok').toLowerCase();
       const alertId = alertData.id;
+      const now = Date.now();
 
-      // Filter duplicate payloads arriving from multiple sync channels
+      for (const [k, ts] of this.processedAlertIds.entries()) {
+        if (now - ts > 60000) this.processedAlertIds.delete(k);
+      }
       if (alertId) {
         if (this.processedAlertIds.has(alertId)) return;
-        this.processedAlertIds.add(alertId);
-        setTimeout(() => this.processedAlertIds.delete(alertId), 15000);
+        this.processedAlertIds.set(alertId, now);
+        if (this.processedAlertIds.size > 300) {
+          const oldest = this.processedAlertIds.keys().next().value;
+          this.processedAlertIds.delete(oldest);
+        }
       }
 
-      // Filter rapid duplicate triggers within 2.5s
-      const fp = `${pName}_${aType}_${uName}_${alertData.gift || ''}_${alertData.count || ''}`;
-      const now = Date.now();
+      for (const [k, ts] of this.seenAlertFingerprints.entries()) {
+        if (now - ts > 10000) this.seenAlertFingerprints.delete(k);
+      }
+      const fp = `${pName}_${aType}_${uName}_${alertData.gift || ''}_${alertData.count || ''}`.toLowerCase();
       const lastSeen = this.seenAlertFingerprints.get(fp) || 0;
-      if (now - lastSeen < 2500) return;
+      if (now - lastSeen < 5000) return;
       this.seenAlertFingerprints.set(fp, now);
-      setTimeout(() => this.seenAlertFingerprints.delete(fp), 8000);
 
-      // Check user alert config
       const alertCfg = this.getAlertConfig(aType, pName);
       if (alertCfg.enabled === false) return;
 
       const isMajor = aType.includes('gift') || aType.includes('sub') || aType.includes('donate');
 
-      // Parity with overlay_alert.html title format
       let rawTitle = alertCfg.title || (isMajor ? 'TERIMA KASIH {user} SUDAH GIFT {gift} x{count}' : 'TERIMA KASIH {user}');
       const displayGift = alertData.gift || alertData.itemName || 'Gift';
       const displayCount = String(alertData.count || alertData.amount || 1);
@@ -469,11 +479,16 @@
       };
 
       if (this.currentAlert) {
-        // Prevent duplicate alerts from entering the queue
+        // Drop additional like alerts while one is already active or queued so tap bursts cannot backlog the island.
+        if (aType.includes('like')) {
+          const likeActive = this.currentAlert.type && this.currentAlert.type.includes('like');
+          const likeQueued = this.alertQueue.some(item => item.type && item.type.includes('like'));
+          if (likeActive || likeQueued) return;
+        }
+
         const isQueued = this.alertQueue.some(item => (item.id && item.id === alertId) || item.fp === fp);
         if (!isQueued) {
           const maxQueue = parseInt(this.options.maxQueueSize, 10) || 50;
-          // tanpa batas, banjir alert membuat antrean membesar dan diputar telat semua
           if (this.alertQueue.length >= maxQueue) return;
           this.alertQueue.push(alertItem);
         }
@@ -607,57 +622,94 @@
 
     playSound(soundUrl, alertItem = {}) {
       if (this.options.isDashboardPreview && !alertItem.isTest) {
-        return; // Don't duplicate sound on dashboard preview for real stream events
+        return;
       }
 
       const url = (soundUrl || 'media/alerts/default_alert.mp3').trim();
       if (!url) return;
 
-      // Cross-Scene / Cross-Source Audio Mutex: prevents double alert SFX if user has multiple scenes active in OBS
-      const alertId = alertItem.id || `${alertItem.type || 'alert'}_${alertItem.user || ''}_${alertItem.gift || ''}_${alertItem.count || ''}`;
-      const lockKey = `zover_alert_lock_${alertId}`;
+      // Hold lock for 60s across ID and fingerprint so queue drift between overlays never replays audio.
+      const fp = `${alertItem.type || 'alert'}_${alertItem.user || ''}_${alertItem.gift || ''}_${alertItem.count || ''}`.toLowerCase();
+      const idLockKey = alertItem.id ? `zover_alert_lock_${alertItem.id}` : null;
+      const fpLockKey = `zover_alert_lock_fp_${fp}`;
+      const lockTtlMs = 60000;
       try {
-        const existingLock = localStorage.getItem(lockKey);
         const now = Date.now();
-        if (existingLock && (now - parseInt(existingLock, 10)) < 3500) {
+        const idLockTs = idLockKey ? parseInt(localStorage.getItem(idLockKey) || '0', 10) : 0;
+        const fpLockTs = parseInt(localStorage.getItem(fpLockKey) || '0', 10);
+        if ((idLockTs && (now - idLockTs) < lockTtlMs) || (fpLockTs && (now - fpLockTs) < lockTtlMs)) {
           return;
         }
-        localStorage.setItem(lockKey, String(now));
-        setTimeout(() => {
-          try { localStorage.removeItem(lockKey); } catch (_) {}
-        }, 5000);
+        if (idLockKey) localStorage.setItem(idLockKey, String(now));
+        localStorage.setItem(fpLockKey, String(now));
       } catch (_) {}
 
       const volume = typeof this.options.soundVolume === 'number'
         ? Math.min(1, Math.max(0, this.options.soundVolume))
         : 0.8;
 
-      try {
-        const player = this.dom.audioPlayer || document.getElementById('chalertAudioPlayer');
-        if (player) {
-          player.pause();
-          player.currentTime = 0;
-          player.src = url;
-          player.volume = volume;
-          const p = player.play();
-          if (p !== undefined) {
-            p.catch(e => console.warn('[Chalert] Audio playback notice:', e));
+      const startAudioPlayback = () => {
+        try {
+          const player = this.dom.audioPlayer || document.getElementById('chalertAudioPlayer');
+          if (player) {
+            player.pause();
+            player.currentTime = 0;
+            player.src = url;
+            player.volume = volume;
+            const p = player.play();
+            if (p !== undefined) {
+              p.catch(e => console.warn('[Chalert] Audio playback notice:', e));
+            }
+          } else {
+            if (this.currentAudio) {
+              this.currentAudio.pause();
+              this.currentAudio = null;
+            }
+            this.currentAudio = new Audio(url);
+            this.currentAudio.volume = volume;
+            const p = this.currentAudio.play();
+            if (p !== undefined) {
+              p.catch(e => console.warn('[Chalert] Audio playback notice:', e));
+            }
           }
-        } else {
-          if (this.currentAudio) {
-            this.currentAudio.pause();
-            this.currentAudio = null;
-          }
-          this.currentAudio = new Audio(url);
-          this.currentAudio.volume = volume;
-          const p = this.currentAudio.play();
-          if (p !== undefined) {
-            p.catch(e => console.warn('[Chalert] Audio playback notice:', e));
-          }
+        } catch (err) {
+          console.warn('[Chalert] Audio playback failed:', err);
         }
-      } catch (err) {
-        console.warn('[Chalert] Audio playback failed:', err);
+      };
+
+      const useServerClaim = Boolean(
+        typeof window !== 'undefined' &&
+        !window.TestRunner &&
+        typeof fetch === 'function' &&
+        window.location &&
+        /^https?:$/i.test(window.location.protocol || '')
+      );
+
+      if (useServerClaim) {
+        (async () => {
+          try {
+            if (window.__zoverObsInactive) {
+              await new Promise(resolve => setTimeout(resolve, 150));
+            }
+            const origin = (window.location && window.location.origin && window.location.origin !== 'null')
+              ? window.location.origin
+              : 'http://127.0.0.1:8765';
+            const params = new URLSearchParams();
+            params.set('key', fpLockKey);
+            if (idLockKey) params.set('id', idLockKey);
+            params.set('ttl', '60000');
+            const res = await fetch(`${origin}/api/claim?${params.toString()}`, { cache: 'no-store' });
+            if (res && res.ok) {
+              const data = await res.json();
+              if (data && data.claimed === false) return;
+            }
+          } catch (_) {}
+          startAudioPlayback();
+        })();
+        return;
       }
+
+      startAudioPlayback();
     }
 
     enqueue(payload) {

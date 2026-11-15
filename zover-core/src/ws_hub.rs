@@ -30,6 +30,7 @@ pub struct AppState {
     pub tx: broadcast::Sender<String>,
     pub worker_cmd_tx: broadcast::Sender<String>,
     pub event_queue: Arc<Mutex<Vec<Value>>>,
+    pub audio_claims: Arc<Mutex<std::collections::HashMap<String, u64>>>,
     pub worker_auth_token: String,
 }
 

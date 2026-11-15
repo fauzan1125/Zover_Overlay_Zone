@@ -171,13 +171,13 @@ class KickConnector {
   handlePusherEvent(msg) {
     if (!msg || !msg.event) return;
 
-    // EVENT: KICK SUBSCRIPTION / GIFTED SUBS
     if (msg.event === 'App\\Events\\SubscriptionEvent' || msg.event === 'App\\Events\\GiftedSubscriptionsEvent' || msg.event.includes('Subscription')) {
       try {
         const data = typeof msg.data === 'string' ? JSON.parse(msg.data) : msg.data;
         const subUser = data.username || data.sender?.username || data.gifter_username || data.user?.username || 'KickUser';
         if (this.onAlert) {
           this.onAlert({
+            id: data.id || `kick_sub_${String(subUser).toLowerCase()}_${Math.floor(Date.now() / 10000)}`,
             type: 'kick_sub',
             platform: 'kick',
             user: subUser

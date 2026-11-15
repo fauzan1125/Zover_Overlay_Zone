@@ -16,13 +16,13 @@ class AlertOverlayManager {
     this.audioPlayer = document.getElementById('alert-audio-player');
     this.queue = [];
     this.isPlaying = false;
+    this.currentAlertType = null;
     this.currentTimer = null;
     this.hideTimeout = null;
-    this.processedAlertIds = new Set();
+    this.processedAlertIds = new Map();
     this.recentFingerprints = new Map();
     this.lastLikeAlertTime = 0;
 
-    // Default Config
     this.config = {
       alertDuration: 6,
       alertSoundVolume: 0.8,
@@ -72,14 +72,12 @@ class AlertOverlayManager {
 
   async loadConfig() {
     try {
-      // 1. Ambil dari server lokal
       const res = await fetch(`${getLocalServerBase()}/api/config`, { cache: 'no-store' });
       if (res.ok) {
         const remoteCfg = await res.json();
         this.mergeConfig(remoteCfg);
       }
     } catch (e) {
-      // 2. Fallback ke LocalStorage
       try {
         const localCfg = localStorage.getItem('chat_overlay_mbak_google_config');
         if (localCfg) {
@@ -109,7 +107,6 @@ class AlertOverlayManager {
   }
 
   initSync() {
-    // 1. BroadcastChannel API
     try {
       this.broadcastChannel = new BroadcastChannel('zover_alert_channel');
       this.broadcastChannel.onmessage = (event) => {
@@ -121,7 +118,6 @@ class AlertOverlayManager {
       console.warn('[Alerts] BroadcastChannel not supported:', e);
     }
 
-    // 2. LocalStorage StorageEvent fallback
     window.addEventListener('storage', (event) => {
       if (event.key === 'chat_overlay_alert_trigger' && event.newValue) {
         try {
@@ -135,10 +131,7 @@ class AlertOverlayManager {
       }
     });
 
-    // 3. Polling config tiap 5 detik untuk update realtime dari dashboard
     setInterval(() => this.loadConfig(), 5000);
-
-    // 4. Server Event Bridge polling for OBS Studio CEF
     this.startServerEventsPolling();
   }
 
@@ -173,27 +166,36 @@ class AlertOverlayManager {
 
     if (payload.type === 'ALERT_TRIGGER' && payload.data) {
       const alertData = payload.data;
-      const alertId = payload.id || alertData.id;
+      const alertId = alertData.id || payload.id;
+      const now = Date.now();
 
-      // Filter duplicate payloads arriving from both BroadcastChannel and localStorage
+      for (const [k, ts] of this.processedAlertIds.entries()) {
+        if (now - ts > 60000) this.processedAlertIds.delete(k);
+      }
       if (alertId) {
         if (this.processedAlertIds.has(alertId)) {
           return;
         }
-        this.processedAlertIds.add(alertId);
-        setTimeout(() => this.processedAlertIds.delete(alertId), 15000);
+        this.processedAlertIds.set(alertId, now);
+        if (this.processedAlertIds.size > 300) {
+          const oldest = this.processedAlertIds.keys().next().value;
+          this.processedAlertIds.delete(oldest);
+        }
       }
 
-      // Filter rapid duplicate triggers within 1500ms
-      const fingerprint = `${alertData.platform || ''}_${alertData.type || ''}_${alertData.user || ''}_${alertData.gift || ''}_${alertData.count || ''}`;
-      const now = Date.now();
+      for (const [k, ts] of this.recentFingerprints.entries()) {
+        if (now - ts > 10000) this.recentFingerprints.delete(k);
+      }
+      const fingerprint = `${alertData.platform || ''}_${alertData.type || ''}_${alertData.user || ''}_${alertData.gift || ''}_${alertData.count || ''}`.toLowerCase();
       const lastSeen = this.recentFingerprints.get(fingerprint) || 0;
-      if (now - lastSeen < 1500) {
+      if (now - lastSeen < 5000) {
         return;
       }
       this.recentFingerprints.set(fingerprint, now);
-      setTimeout(() => this.recentFingerprints.delete(fingerprint), 5000);
 
+      if (alertId && !alertData.id) {
+        alertData.id = alertId;
+      }
       this.enqueueAlert(alertData);
     } else if (payload.type === 'CONFIG_UPDATE' && payload.data) {
       this.mergeConfig(payload.data);
@@ -205,18 +207,23 @@ class AlertOverlayManager {
     const cfg = this.config.alerts[alertType] || {};
 
     if (cfg.enabled === false) {
-      return; // Dimatikan oleh user
+      return;
     }
 
     if (alertType === 'tiktok_like') {
       const now = Date.now();
       const minInterval = (this.config.alertDuration || 6) * 1000;
-      const hasLikeInQueue = this.queue.some(item => item.type === 'tiktok_like');
+      const hasLikeInQueue = (this.isPlaying && this.currentAlertType === 'tiktok_like') ||
+        this.queue.some(item => item.type === 'tiktok_like');
 
       if (hasLikeInQueue || (now - this.lastLikeAlertTime < minInterval)) {
         return;
       }
       this.lastLikeAlertTime = now;
+    }
+
+    if (this.queue.length >= 30) {
+      return;
     }
 
     this.queue.push({
@@ -233,11 +240,13 @@ class AlertOverlayManager {
   processQueue() {
     if (this.queue.length === 0) {
       this.isPlaying = false;
+      this.currentAlertType = null;
       return;
     }
 
     this.isPlaying = true;
     const currentAlert = this.queue.shift();
+    this.currentAlertType = currentAlert.type || null;
     this.renderAlert(currentAlert);
   }
 
@@ -246,18 +255,14 @@ class AlertOverlayManager {
 
     const { type, user, gift, count, cfg, platform } = alertItem;
 
-    // Bersihkan container sebelumnya
     this.container.innerHTML = '';
 
-    // Buat stage
     const stage = document.createElement('div');
     stage.className = 'alert-stage';
 
-    // 1. KOTAK MEDIA ("TEMPAT GIFT")
     const mediaBox = document.createElement('div');
     mediaBox.className = 'alert-media-box';
 
-    // Platform Tag
     const tag = document.createElement('div');
     tag.className = 'alert-platform-tag';
     const platformLabel = (platform || type.split('_')[0] || '').toUpperCase();
@@ -273,7 +278,7 @@ class AlertOverlayManager {
       vid.src = videoUrl;
       vid.autoplay = true;
       vid.loop = true;
-      vid.muted = true; // Audio di-handle soundboard audio player
+      vid.muted = true; // Audio is played separately through the soundboard player.
       vid.playsInline = true;
       mediaBox.appendChild(vid);
     } else if (videoUrl && isImage) {
@@ -282,7 +287,6 @@ class AlertOverlayManager {
       img.alt = 'Alert Media';
       mediaBox.appendChild(img);
     } else {
-      // Default: Kotak Kuning Ikonik bertuliskan "TEMPAT GIFT" persis gambar referensi
       const defaultDiv = document.createElement('div');
       defaultDiv.className = 'alert-default-gift';
       defaultDiv.innerHTML = `
@@ -300,11 +304,9 @@ class AlertOverlayManager {
 
     stage.appendChild(mediaBox);
 
-    // 2. TEKS UCAPAN DI BAWAH KOTAK
     const textWrapper = document.createElement('div');
     textWrapper.className = 'alert-text-wrapper';
 
-    // Format Template Teks
     let rawTitle = (cfg && cfg.title) ? cfg.title : 'TERIMA KASIH {user} SUDAH SUBS';
     const displayUser = user || 'Teman';
     const displayGift = gift || 'Gift';
@@ -321,7 +323,6 @@ class AlertOverlayManager {
     titleEl.innerHTML = formattedTitle;
     textWrapper.appendChild(titleEl);
 
-    // Subtext kecil (opsional)
     if (cfg && cfg.subtext) {
       const subEl = document.createElement('div');
       subEl.className = 'alert-subtext';
@@ -332,15 +333,12 @@ class AlertOverlayManager {
     stage.appendChild(textWrapper);
     this.container.appendChild(stage);
 
-    // 3. MAINKAN SOUNDBOARD AUDIO
     this.playSound(cfg ? cfg.soundUrl : '', alertItem);
 
-    // 4. TRIGGER ANIMASI SHOW
     requestAnimationFrame(() => {
       stage.classList.add('alert-show');
     });
 
-    // 5. TUNGGU DURASI LALU HIDE & PLAY NEXT
     const durationMs = (this.config.alertDuration || 6) * 1000;
 
     if (this.currentTimer) clearTimeout(this.currentTimer);
@@ -353,48 +351,85 @@ class AlertOverlayManager {
       this.hideTimeout = setTimeout(() => {
         this.container.innerHTML = '';
         this.processQueue();
-      }, 400); // Selesai transisi keluar
+      }, 400);
     }, durationMs);
   }
 
   playSound(soundUrl, alertItem = {}) {
     if (!this.audioPlayer) return;
 
-    // Cross-Scene / Cross-Source Audio Mutex: prevents double alert SFX if user has multiple scenes active in OBS
-    const alertId = alertItem.id || `${alertItem.type || 'alert'}_${alertItem.user || ''}_${alertItem.gift || ''}_${alertItem.count || ''}`;
-    const lockKey = `zover_alert_lock_${alertId}`;
+    // Hold lock for 60s across ID and fingerprint so queue drift between overlays never replays audio.
+    const fp = `${alertItem.type || 'alert'}_${alertItem.user || ''}_${alertItem.gift || ''}_${alertItem.count || ''}`.toLowerCase();
+    const idLockKey = alertItem.id ? `zover_alert_lock_${alertItem.id}` : null;
+    const fpLockKey = `zover_alert_lock_fp_${fp}`;
+    const lockTtlMs = 60000;
     try {
-      const existingLock = localStorage.getItem(lockKey);
       const now = Date.now();
-      if (existingLock && (now - parseInt(existingLock, 10)) < 3500) {
-        return; // Another OBS scene is already playing this alert SFX
+      const idLockTs = idLockKey ? parseInt(localStorage.getItem(idLockKey) || '0', 10) : 0;
+      const fpLockTs = parseInt(localStorage.getItem(fpLockKey) || '0', 10);
+      if ((idLockTs && (now - idLockTs) < lockTtlMs) || (fpLockTs && (now - fpLockTs) < lockTtlMs)) {
+        return;
       }
-      localStorage.setItem(lockKey, String(now));
-      setTimeout(() => {
-        try { localStorage.removeItem(lockKey); } catch (_) {}
-      }, 5000);
+      if (idLockKey) localStorage.setItem(idLockKey, String(now));
+      localStorage.setItem(fpLockKey, String(now));
     } catch (_) {}
 
     const url = (soundUrl || 'media/alerts/default_alert.mp3').trim();
     if (!url) return;
 
-    try {
-      this.audioPlayer.pause();
-      this.audioPlayer.currentTime = 0;
-      this.audioPlayer.src = url;
-      this.audioPlayer.volume = typeof this.config.alertSoundVolume === 'number'
-        ? this.config.alertSoundVolume
-        : 0.8;
+    const startAudioPlayback = () => {
+      try {
+        this.audioPlayer.pause();
+        this.audioPlayer.currentTime = 0;
+        this.audioPlayer.src = url;
+        this.audioPlayer.volume = typeof this.config.alertSoundVolume === 'number'
+          ? this.config.alertSoundVolume
+          : 0.8;
 
-      const playPromise = this.audioPlayer.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(e => {
-          console.warn('[Alerts] Audio playback autoplay policy notice:', e);
-        });
+        const playPromise = this.audioPlayer.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(e => {
+            console.warn('[Alerts] Audio playback autoplay policy notice:', e);
+          });
+        }
+      } catch (err) {
+        console.warn('[Alerts] Audio error:', err);
       }
-    } catch (err) {
-      console.warn('[Alerts] Audio error:', err);
+    };
+
+    const useServerClaim = Boolean(
+      typeof window !== 'undefined' &&
+      !window.TestRunner &&
+      typeof fetch === 'function' &&
+      window.location &&
+      /^https?:$/i.test(window.location.protocol || '')
+    );
+
+    if (useServerClaim) {
+      (async () => {
+        try {
+          if (window.__zoverObsInactive) {
+            await new Promise(resolve => setTimeout(resolve, 150));
+          }
+          const origin = (window.location && window.location.origin && window.location.origin !== 'null')
+            ? window.location.origin
+            : 'http://127.0.0.1:8765';
+          const params = new URLSearchParams();
+          params.set('key', fpLockKey);
+          if (idLockKey) params.set('id', idLockKey);
+          params.set('ttl', '60000');
+          const res = await fetch(`${origin}/api/claim?${params.toString()}`, { cache: 'no-store' });
+          if (res && res.ok) {
+            const data = await res.json();
+            if (data && data.claimed === false) return;
+          }
+        } catch (_) {}
+        startAudioPlayback();
+      })();
+      return;
     }
+
+    startAudioPlayback();
   }
 
   escapeHtml(str) {
@@ -435,6 +470,12 @@ if (typeof document !== 'undefined') {
 }
 
 if (typeof window !== 'undefined') {
+  try {
+    if (!window.TestRunner && window.location && window.location.protocol === 'http:' && window.location.hostname === 'localhost' && typeof window.location.replace === 'function') {
+      window.location.replace(window.location.href.replace('://localhost', '://127.0.0.1'));
+    }
+  } catch (_) {}
+
   window.addEventListener('beforeunload', () => {
     try {
       if (window.alertOverlay && typeof window.alertOverlay.destroy === 'function') {

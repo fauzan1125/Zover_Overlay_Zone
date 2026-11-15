@@ -65,6 +65,7 @@ const ALLOWED_PROXY_HOSTS = new Set([
 const YOUTUBE_COOKIES = 'CONSENT=PENDING+999; SOCS=CAISNQgDEitib3FfaWRlbnRpdHlmcm9udGVuZHVpc2VydmVyXzIwMjMwODI5LjA3X3AxGgJlbiACGgYIgJnSmgY';
 
 const eventQueue = [];
+const audioClaims = new Map();
 
 function isLocalOrigin(req) {
   const origin = req.headers['origin'];
@@ -257,6 +258,37 @@ const server = http.createServer((req, res) => {
       });
       return;
     }
+  }
+
+  if (pathname === '/api/claim') {
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    const key = parsedUrl.searchParams.get('key') || '';
+    const idKey = parsedUrl.searchParams.get('id') || '';
+    if (!key && !idKey) {
+      res.writeHead(200);
+      res.end(JSON.stringify({ claimed: true }));
+      return;
+    }
+
+    const rawTtl = parseInt(parsedUrl.searchParams.get('ttl') || '60000', 10) || 60000;
+    const ttl = Math.min(300000, Math.max(1000, rawTtl));
+    const now = Date.now();
+    for (const [k, ts] of audioClaims.entries()) {
+      if (now - ts >= ttl) audioClaims.delete(k);
+    }
+
+    const alreadyClaimed = (key && audioClaims.has(key)) || (idKey && audioClaims.has(idKey));
+    if (alreadyClaimed) {
+      res.writeHead(200);
+      res.end(JSON.stringify({ claimed: false }));
+      return;
+    }
+
+    if (key) audioClaims.set(key, now);
+    if (idKey) audioClaims.set(idKey, now);
+    res.writeHead(200);
+    res.end(JSON.stringify({ claimed: true }));
+    return;
   }
 
   if (pathname === '/api/upload') {
@@ -745,6 +777,10 @@ function getOrCreateTikTokRoom(username, sessionId) {
   const handleFollow = data => {
     const uniqueId = data?.user?.displayId || data?.uniqueId || '';
     if (!uniqueId || room.followedUsers.has(uniqueId)) return;
+    if (room.followedUsers.size >= 1000) {
+      const oldest = room.followedUsers.values().next().value;
+      room.followedUsers.delete(oldest);
+    }
     room.followedUsers.add(uniqueId);
     const nickname = data?.user?.nickname || data?.nickname || uniqueId;
     const profilePictureUrl = data?.user?.avatarThumb?.urlList?.[0] || data?.profilePictureUrl || '';

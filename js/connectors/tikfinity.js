@@ -129,7 +129,6 @@ class TikFinityConnector {
     const eventName = String(packet.event || '').toLowerCase();
     const data = packet.data || {};
 
-    // 1. Follower alert
     const isFollow = eventName === 'follow' ||
       eventName === 'follower' ||
       eventName === 'new_follower' ||
@@ -142,15 +141,17 @@ class TikFinityConnector {
       const followKey = (data.uniqueId || data.user?.uniqueId || username).toLowerCase();
 
       const now = Date.now();
+      for (const [k, ts] of this.recentFollowers.entries()) {
+        if (now - ts > 15000) this.recentFollowers.delete(k);
+      }
       const lastFollow = this.recentFollowers.get(followKey) || 0;
-      // follow duplikat: lewati alertnya saja, jangan seluruh packet
-      // (viewer count dan like bisa ikut terbawa di packet yang sama)
+      // Skip only the duplicate follow alert so viewer counts or likes in the same packet still process.
       if (now - lastFollow >= 6000) {
         this.recentFollowers.set(followKey, now);
-        setTimeout(() => this.recentFollowers.delete(followKey), 15000);
 
         if (this.onAlert) {
           this.onAlert({
+            id: `tt_follow_${followKey}`,
             type: 'tiktok_follow',
             platform: 'tiktok',
             user: username,
@@ -160,7 +161,6 @@ class TikFinityConnector {
       }
     }
 
-    // 2. Viewer count metric
     const rawCount = data.viewerCount ??
       data.viewer_count ??
       data.user_count ??
@@ -176,7 +176,7 @@ class TikFinityConnector {
       }
     }
 
-    // 3. Tap-tap like event (accumulated per user to avoid room-level aggregate spam)
+    // Accumulate likes per user to avoid room-level aggregate spam.
     const isLike = eventName === 'like' ||
       eventName === 'tiktok_like' ||
       eventName === 'likes' ||
@@ -204,11 +204,11 @@ class TikFinityConnector {
       if (currentMilestone > userRecord.lastMilestone && currentMilestone >= step) {
         userRecord.lastMilestone = currentMilestone;
 
-        // Debounce per-user to prevent queue floods during rapid bursts
         if (now - userRecord.lastAlertTime >= 5000) {
           userRecord.lastAlertTime = now;
           if (this.onAlert) {
             this.onAlert({
+              id: `tt_like_ms_${userKey}_${currentMilestone}`,
               type: 'tiktok_like',
               platform: 'tiktok',
               user: username,

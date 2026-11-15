@@ -6,6 +6,22 @@
 
 const WebSocket = require('ws');
 
+// TikTok stopped issuing Set-Cookie: ttwid on the bare root URL (/), but still issues it on /live.
+if (typeof globalThis.fetch === 'function') {
+  const nativeFetch = globalThis.fetch.bind(globalThis);
+  globalThis.fetch = async (input, init) => {
+    const url = typeof input === 'string' ? input : (input && input.url ? input.url : String(input));
+    if (url === 'https://www.tiktok.com/') {
+      const liveUrl = 'https://www.tiktok.com/live';
+      const nextInput = (typeof Request !== 'undefined' && input instanceof Request)
+        ? new Request(liveUrl, input)
+        : liveUrl;
+      return nativeFetch(nextInput, init);
+    }
+    return nativeFetch(input, init);
+  };
+}
+
 let hubUrl = process.env.ZOVER_HUB_WS || 'ws://127.0.0.1:8765/api/worker/tiktok';
 if (process.env.ZOVER_WORKER_TOKEN && !hubUrl.includes('token=')) {
   hubUrl += `${hubUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(process.env.ZOVER_WORKER_TOKEN)}`;
@@ -186,8 +202,8 @@ async function startTikTokSession(username) {
   const normalizedUser = String(username || '').trim().replace(/^@/, '').toLowerCase();
   if (!normalizedUser) return;
 
-  // Reuse active session when another overlay/client connects for the same channel
-  if (activeFiber && activeUsername === normalizedUser && (isSessionConnected || isSessionConnecting)) {
+  // Claim the session synchronously before awaiting so concurrent connect requests do not fork duplicate fibers.
+  if (activeUsername === normalizedUser && (activeFiber || isSessionConnected || isSessionConnecting)) {
     if (isSessionConnected) {
       sendToHub({
         type: 'status',
@@ -200,12 +216,31 @@ async function startTikTokSession(username) {
     return;
   }
 
-  await stopTikTokSession(false);
+  const previousFiber = activeFiber;
+  const sessionToken = ++activeSessionToken;
+  activeFiber = null;
+  activeUsername = normalizedUser;
+  activeRoomId = null;
+  isSessionConnected = false;
+  isSessionConnecting = true;
+
+  if (previousFiber) {
+    try {
+      const { Effect, Fiber } = await loadTikliveDeps();
+      await Effect.runPromise(Fiber.interrupt(previousFiber));
+    } catch (_) {}
+  }
+
+  if (sessionToken !== activeSessionToken) return;
 
   let deps;
   try {
     deps = await loadTikliveDeps();
   } catch (err) {
+    if (sessionToken === activeSessionToken) {
+      isSessionConnecting = false;
+      activeUsername = '';
+    }
     sendToHub({
       type: 'error',
       platform: 'tiktok',
@@ -214,10 +249,9 @@ async function startTikTokSession(username) {
     return;
   }
 
+  if (sessionToken !== activeSessionToken) return;
+
   const { LiveConnection, Effect, Stream } = deps;
-  const sessionToken = activeSessionToken;
-  activeUsername = normalizedUser;
-  isSessionConnecting = true;
   console.log(`[Sidecar] Memulai koneksi TikTok Live (tiklive open-source) ke @${activeUsername}...`);
 
   const connectionStream = LiveConnection.connect(activeUsername, {

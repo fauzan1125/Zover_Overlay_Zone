@@ -277,8 +277,7 @@ class YouTubeConnector {
       const html = await res.text();
 
       if (html && html.length > 500) {
-        // fetch recovery saat continuation putus tetap real-time; hanya load pertama
-        // yang backlog — pesan lama terlindungi seenMessageIds dari pengulangan
+        // Treat continuation recovery fetches as real-time; seenMessageIds suppresses replayed messages.
         this.parseLiveChatHtml(html, !st.backlogLoaded);
         st.backlogLoaded = true;
         st.failCount = 0;
@@ -340,13 +339,13 @@ class YouTubeConnector {
           const renderer = act.addChatItemAction?.item;
           if (!renderer) return;
 
-          // EVENT: YOUTUBE SUBSCRIPTION / MEMBERSHIP
           const memberItem = renderer.liveChatMembershipItemRenderer || renderer.liveChatSponsorMessageRenderer || renderer.liveChatSubAnnouncementRenderer;
           if (memberItem) {
             const subName = memberItem.authorName?.simpleText || 'YouTube Viewer';
-            // sub dari halaman riwayat (initial load) jangan memicu alert, sama seperti chat
+            // Skip membership items from initial history load to avoid replaying old alerts.
             if (this.onAlert && !isHistory) {
               this.onAlert({
+                id: memberItem.id || `yt_sub_${String(subName).toLowerCase()}_${Math.floor(Date.now() / 10000)}`,
                 type: 'yt_sub',
                 platform: 'youtube',
                 user: subName

@@ -36,6 +36,7 @@ async fn main() {
         tx,
         worker_cmd_tx,
         event_queue: Arc::new(std::sync::Mutex::new(Vec::new())),
+        audio_claims: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
         worker_auth_token: worker_auth_token.clone(),
     });
 
@@ -51,6 +52,7 @@ async fn main() {
         .route("/api/worker/tiktok", get(tiktok_worker_ws_handler))
         .route("/api/config", get(api::get_config).post(api::post_config))
         .route("/api/events", get(api::get_events).post(api::post_events))
+        .route("/api/claim", get(api::claim_audio).post(api::claim_audio))
         .route("/proxy", get(api::proxy_handler))
         .route("/api/upload", axum::routing::post(api::upload_handler))
         .fallback(static_asset_handler)
@@ -103,7 +105,35 @@ async fn static_asset_handler(uri: Uri) -> impl IntoResponse {
         path = "index.html".to_string();
     }
 
-    // 1. Cek embedded static assets terlebih dahulu
+    let decoded = path.replace("%20", " ").replace("%2e", ".").replace("%2E", ".").replace("%2f", "/").replace("%2F", "/").replace("%5c", "\\").replace("%5C", "\\");
+    let lower = decoded.to_lowercase();
+    let has_unsafe_segment = decoded.split('/').any(|seg| seg.ends_with('.') || seg.ends_with(' ') || seg.contains('~'));
+
+    // Amankan dari path traversal, Windows 8.3 SFN, dan akses file sensitif sebelum membaca disk
+    if has_unsafe_segment || lower.contains("..") || lower.contains(':') || lower.contains('\\') || lower.starts_with('.') || lower.starts_with("node_modules") || lower.contains("config.json") || lower == "server.ps1" || lower == "server.js" {
+        return Response::builder()
+            .status(StatusCode::FORBIDDEN)
+            .header(header::CONTENT_TYPE, "text/plain; charset=utf-8")
+            .body(Body::from("403 Forbidden"))
+            .unwrap();
+    }
+
+    // Prioritaskan file kerja lokal (js/, css/, media/) agar pembaruan langsung aktif tanpa cache basi
+    let file_path = std::path::Path::new(&path);
+    if file_path.exists() && file_path.is_file() {
+        if let Ok(data) = std::fs::read(file_path) {
+            let mime = mime_guess::from_path(&path).first_or_octet_stream();
+            let cache_ctrl = if path.starts_with("media/") { "public, max-age=3600" } else { "no-cache" };
+            return Response::builder()
+                .status(StatusCode::OK)
+                .header(header::CONTENT_TYPE, mime.as_ref())
+                .header(header::CACHE_CONTROL, cache_ctrl)
+                .body(Body::from(data))
+                .unwrap();
+        }
+    }
+
+    // Fallback ke embedded static assets
     if let Some(content) = StaticAssets::get(&path) {
         let mime = mime_guess::from_path(&path).first_or_octet_stream();
         return Response::builder()
@@ -112,29 +142,6 @@ async fn static_asset_handler(uri: Uri) -> impl IntoResponse {
             .header(header::CACHE_CONTROL, "no-cache")
             .body(Body::from(content.data))
             .unwrap();
-    }
-
-    // 2. Jika tidak ada di embedded assets, cek di filesystem (misalnya media/alerts/...)
-    // Amankan dari path traversal dan akses file sensitif
-    if path.contains("..") || path.contains(':') || path.contains('\\') || path.starts_with('.') || path == "config.json" {
-        return Response::builder()
-            .status(StatusCode::FORBIDDEN)
-            .header(header::CONTENT_TYPE, "text/plain; charset=utf-8")
-            .body(Body::from("403 Forbidden"))
-            .unwrap();
-    }
-
-    let file_path = std::path::Path::new(&path);
-    if file_path.exists() && file_path.is_file() {
-        if let Ok(data) = std::fs::read(file_path) {
-            let mime = mime_guess::from_path(&path).first_or_octet_stream();
-            return Response::builder()
-                .status(StatusCode::OK)
-                .header(header::CONTENT_TYPE, mime.as_ref())
-                .header(header::CACHE_CONTROL, "public, max-age=3600")
-                .body(Body::from(data))
-                .unwrap();
-        }
     }
 
     Response::builder()

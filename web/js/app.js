@@ -235,12 +235,15 @@ class Application {
       this.dashboardRunningTextEngine = new RunningTextEngine(document.getElementById('rt-dashboard-preview'), { disableSync: true });
     }
 
-    // Initialize Chalert Widget in Overlay (OBS) or Dashboard Preview
     if (this.isChalertMode && typeof ChalertWidget !== 'undefined') {
       const stage = document.getElementById('chalertStage');
       const island = document.getElementById('chalertIsland');
       if (island) {
-        this.chalertWidget = new ChalertWidget(Object.assign({}, this.config.chalert || {}, { disableSync: true, enableServerEvents: true }));
+        this.chalertWidget = new ChalertWidget(Object.assign({}, this.config.chalert || {}, {
+          disableSync: true,
+          enableServerEvents: true,
+          ttsInstance: this.tts
+        }));
         this.chalertWidget.init({
           stage: stage,
           island: island,
@@ -261,7 +264,11 @@ class Application {
         window.chalertWidget = this.chalertWidget;
       }
     } else if (!this.isOverlayMode && document.getElementById('chalertIslandPreview') && typeof ChalertWidget !== 'undefined') {
-      this.dashboardChalertWidget = new ChalertWidget(Object.assign({}, this.config.chalert || {}, { disableSync: true, isDashboardPreview: true }));
+      this.dashboardChalertWidget = new ChalertWidget(Object.assign({}, this.config.chalert || {}, {
+        disableSync: true,
+        isDashboardPreview: true,
+        ttsInstance: this.tts
+      }));
       this.dashboardChalertWidget.init({
         stage: document.getElementById('chalertStagePreview'),
         island: document.getElementById('chalertIslandPreview'),
@@ -313,10 +320,43 @@ class Application {
       } else {
         // If in OBS Overlay mode, poll the backend config every 5 seconds to sync settings live
         setInterval(() => this.pollOverlayConfig(), 5000);
+        if (!this.isChalertMode) {
+          this.startServerEventsPolling();
+        }
       }
 
       this.autoConnectOverlay();
     });
+  }
+
+  startServerEventsPolling() {
+    if (this.isEventsPollingActive || typeof window === 'undefined') return;
+    this.isEventsPollingActive = true;
+    this.lastEventTimestamp = Date.now() - 2000;
+    const eventsUrl = this.getConfigApiUrl().replace('/api/config', '/api/events');
+
+    setInterval(async () => {
+      try {
+        const res = await fetch(`${eventsUrl}?since=${this.lastEventTimestamp}`, { cache: 'no-store' });
+        if (res.ok) {
+          const events = await res.json();
+          if (Array.isArray(events) && events.length > 0) {
+            for (const evt of events) {
+              if (evt.timestamp > this.lastEventTimestamp) {
+                this.lastEventTimestamp = evt.timestamp;
+              }
+              if (evt.type === 'LIVE_CHAT' && evt.data) {
+                this.handleIncomingChat(evt.data, true);
+              } else if (evt.type === 'ALERT_TRIGGER' && evt.data) {
+                this.handleIncomingAlert(evt.data, true);
+              } else if (evt.type === 'TEST_TTS' && this.tts) {
+                this.tts.testVoice();
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    }, 400);
   }
 
   getConfigApiUrl() {
@@ -335,9 +375,10 @@ class Application {
         // Server mengirim {} bila config.json belum ada; tanpa normalisasi,
         // undefined !== '' selalu true sehingga connector terputus tiap poll
         const norm = (v) => (v === undefined || v === null) ? '' : String(v);
-        const kickChanged = norm(newConfig.kickUsername) !== norm(this.config.kickUsername);
-        const ytChanged = norm(newConfig.ytVideoInput) !== norm(this.config.ytVideoInput) || norm(newConfig.ytApiKey) !== norm(this.config.ytApiKey);
-        const tiktokChanged = norm(newConfig.tiktokUsername) !== norm(this.config.tiktokUsername) || norm(newConfig.tiktokApiToken) !== norm(this.config.tiktokApiToken);
+        const normUser = (v) => norm(v).trim().replace(/^@/, '').toLowerCase();
+        const kickChanged = normUser(newConfig.kickUsername) !== normUser(this.config.kickUsername);
+        const ytChanged = norm(newConfig.ytVideoInput).trim() !== norm(this.config.ytVideoInput).trim() || norm(newConfig.ytApiKey).trim() !== norm(this.config.ytApiKey).trim();
+        const tiktokChanged = normUser(newConfig.tiktokUsername) !== normUser(this.config.tiktokUsername) || norm(newConfig.tiktokApiToken).trim() !== norm(this.config.tiktokApiToken).trim();
         const tfChanged = norm(newConfig.tikfinityEnabled) !== norm(this.config.tikfinityEnabled);
 
         this.config = { ...this.config, ...newConfig };
@@ -474,35 +515,25 @@ class Application {
       this.seenMessageIds = new Set(Array.from(this.seenMessageIds).slice(-400));
     }
 
-    // 1. Render in Chalert Dynamic Island (OBS Overlay or Dashboard Preview)
-    let isChalertPending = false;
+    // Always pass skipTTS = true so deferred Chalert cards never replay TTS after the cross-window lock expires.
     if (this.chalertWidget) {
-      if (this.chalertWidget.currentAlert) {
-        isChalertPending = true;
-        // Let chalertWidget trigger TTS when the deferred chat card is revealed
-        this.chalertWidget.handleIncomingChat(chatData, false);
-      } else {
-        this.chalertWidget.handleIncomingChat(chatData, true);
-      }
+      this.chalertWidget.handleIncomingChat(chatData, true);
     } else if (this.dashboardChalertWidget) {
       this.dashboardChalertWidget.handleIncomingChat(chatData, true);
     }
 
-    // 2. Render Chat Card in Regular Overlay
     if (this.renderer) {
       this.renderer.addMessage(chatData);
     }
 
-    // 3. Read Comment with Mbak Google TTS
-    if (this.tts && this.config.ttsEnabled !== false && !chatData.isHistory && !isChalertPending) {
+    if (this.tts && this.config.ttsEnabled !== false && !chatData.isHistory) {
       const shouldSpeak = this.isOverlayMode || !this.config.ttsOverlayOnly || Boolean(chatData.isTest);
       if (shouldSpeak) {
         this.tts.speakMessage(chatData);
       }
     }
 
-    // 4. Broadcast to other open windows if originated locally
-    if (!isFromSync) {
+    if (!isFromSync && !this.isOverlayMode) {
       this.broadcastLiveChat(chatData);
     }
   }
@@ -516,7 +547,6 @@ class Application {
     const alertId = alertData.id || `${pName.toLowerCase()}_${aType}_${uName}_${alertData.gift || ''}_${alertData.count || ''}_${timeWindow}`;
     alertData.id = alertId;
 
-    // Filter duplicate alerts arriving via multiple channels
     if (this.seenAlertIds.has(alertId)) return;
     this.seenAlertIds.add(alertId);
     if (this.seenAlertIds.size > 500) {
@@ -532,14 +562,13 @@ class Application {
 
     this.logActivity(logDesc, 'ok');
 
-    // 1. Render in Chalert Dynamic Island (OBS Overlay or Dashboard Preview)
     if (this.chalertWidget) {
       this.chalertWidget.handleIncomingAlert(alertData);
     } else if (this.dashboardChalertWidget) {
       this.dashboardChalertWidget.handleIncomingAlert(alertData);
     }
 
-    if (!isFromSync) {
+    if (!isFromSync && !this.isOverlayMode) {
       this.broadcastAlert(alertData);
     }
   }
@@ -555,19 +584,16 @@ class Application {
       timestamp: Date.now()
     };
 
-    // 1. BroadcastChannel API
     try {
       if (this.alertBroadcastChannel) {
         this.alertBroadcastChannel.postMessage(payload);
       }
     } catch (e) {}
 
-    // 2. LocalStorage StorageEvent
     try {
       localStorage.setItem(this.alertTriggerKey, JSON.stringify(payload));
     } catch (e) {}
 
-    // 3. Send to Server Event Bridge for OBS CEF overlays
     this.broadcastEventToServer(payload);
   }
 
@@ -659,7 +685,6 @@ class Application {
     }
 
     try {
-      // 1. Direct Binary Streaming Upload (Instan, selesai dalam hitungan milidetik)
       const uploadUrl = `${this.getConfigApiUrl().replace('/api/config', '/api/upload')}?filename=${encodeURIComponent(file.name)}`;
       const res = await fetch(uploadUrl, {
         method: 'POST',
@@ -709,19 +734,16 @@ class Application {
       timestamp: Date.now()
     };
 
-    // 1. LocalStorage Trigger
     try {
       localStorage.setItem(this.liveChatKey, JSON.stringify(payload));
     } catch (e) {}
 
-    // 2. BroadcastChannel API
     try {
       if (this.broadcastChannel) {
         this.broadcastChannel.postMessage(payload);
       }
     } catch (e) {}
 
-    // 3. Send to Server Event Bridge for OBS CEF overlays
     this.broadcastEventToServer(payload);
   }
 
@@ -757,7 +779,6 @@ class Application {
 
 
   setupCrossWindowSync() {
-    // 1. BroadcastChannel Listener
     try {
       if ('BroadcastChannel' in window) {
         this.broadcastChannel = new BroadcastChannel('chat_overlay_channel');
@@ -808,7 +829,6 @@ class Application {
       }
     } catch (e) {}
 
-    // 2. LocalStorage Storage Event Listener
     window.addEventListener('storage', (e) => {
       // Sync Chalert Direct Triggers
       if (e.key === this.chalertTriggerKey && e.newValue) {
@@ -850,9 +870,10 @@ class Application {
         try {
           const newConfig = JSON.parse(e.newValue);
           const norm = (v) => (v === undefined || v === null) ? '' : String(v);
-          const kickChanged = norm(newConfig.kickUsername) !== norm(this.config.kickUsername);
-          const ytChanged = norm(newConfig.ytVideoInput) !== norm(this.config.ytVideoInput) || norm(newConfig.ytApiKey) !== norm(this.config.ytApiKey);
-          const tiktokChanged = norm(newConfig.tiktokUsername) !== norm(this.config.tiktokUsername) || norm(newConfig.tiktokApiToken) !== norm(this.config.tiktokApiToken);
+          const normUser = (v) => norm(v).trim().replace(/^@/, '').toLowerCase();
+          const kickChanged = normUser(newConfig.kickUsername) !== normUser(this.config.kickUsername);
+          const ytChanged = norm(newConfig.ytVideoInput).trim() !== norm(this.config.ytVideoInput).trim() || norm(newConfig.ytApiKey).trim() !== norm(this.config.ytApiKey).trim();
+          const tiktokChanged = normUser(newConfig.tiktokUsername) !== normUser(this.config.tiktokUsername) || norm(newConfig.tiktokApiToken).trim() !== norm(this.config.tiktokApiToken).trim();
           const tfChanged = norm(newConfig.tikfinityEnabled) !== norm(this.config.tikfinityEnabled);
 
           this.config = { ...this.config, ...newConfig };
@@ -924,6 +945,11 @@ class Application {
         this.broadcastChannel.postMessage({ type: 'TEST_TTS', timestamp: Date.now() });
       }
     } catch (e) {}
+
+    this.broadcastEventToServer({
+      type: 'TEST_TTS',
+      timestamp: Date.now()
+    });
   }
 
   bindDashboardEvents() {
@@ -1875,7 +1901,7 @@ class Application {
   async loadState() {
     let loadedConfig = {};
     
-    // 1. Try to load from local backend API (solves OBS isolated localStorage issue)
+    // Load from the local backend API first because OBS browser sources use isolated localStorage.
     try {
       const res = await fetch(this.getConfigApiUrl(), { cache: 'no-store' });
       if (res.ok) {
@@ -1888,7 +1914,6 @@ class Application {
       console.warn('Failed to load from API', e);
     }
 
-    // 2. Fallback to LocalStorage
     let fellBackToLocal = false;
     if (Object.keys(loadedConfig).length === 0) {
       try {
@@ -1978,7 +2003,8 @@ class Application {
         platform: 'tiktok',
         username: 'PenontonSetia',
         message: 'Stream hari ini keren banget, semangat terus ya!',
-        avatar: 'logo_platform/tiktok.jpg'
+        avatar: 'logo_platform/tiktok.jpg',
+        isTest: true
       };
       this.handleIncomingChat(chatData, false);
     } else if (type === 'gift') {
